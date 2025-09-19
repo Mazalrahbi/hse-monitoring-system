@@ -1,0 +1,10 @@
+-- Temporarily disable RLS for testing purposes
+-- Run this script first, then run the seed script, then you can re-enable RLS later
+
+ALTER TABLE org_site DISABLE ROW LEVEL SECURITY;
+ALTER TABLE section DISABLE ROW LEVEL SECURITY;
+ALTER TABLE kpi DISABLE ROW LEVEL SECURITY;
+ALTER TABLE kpi_value DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_user DISABLE ROW LEVEL SECURITY;
+ALTER TABLE change_set DISABLE ROW LEVEL SECURITY;
+ALTER TABLE event_log DISABLE ROW LEVEL SECURITY;
