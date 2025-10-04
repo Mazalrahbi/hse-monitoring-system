@@ -27,8 +27,8 @@ export function KpiGrid() {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
-  const [contractorName, setContractorName] = useState('Black Gold Integrated Solution PDO Nimr');
-  const [pdoHolder, setPdoHolder] = useState('Al Salti Anwar, UPKC1');
+  const [contractorName, setContractorName] = useState('test');
+  const [pdoHolder, setPdoHolder] = useState('test');
   const [editingHeader, setEditingHeader] = useState<'contractor' | 'pdo' | null>(null);
   const [headerEditValue, setHeaderEditValue] = useState('');
 
