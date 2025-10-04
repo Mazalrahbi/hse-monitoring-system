@@ -386,8 +386,8 @@ export function KpiGrid() {
   });
 
   return (
-    <div className="w-full overflow-auto">
-      <div className="min-w-[1200px]">
+    <div className="w-full overflow-x-auto overflow-y-visible">
+      <div className="min-w-[1650px]">
         {/* Header */}
         <div className="bg-blue-600 text-white p-4 text-center">
           <h1 className="text-2xl font-bold">2025 HSE Monitoring Plan</h1>
@@ -479,7 +479,7 @@ export function KpiGrid() {
 
         {/* Table Header */}
         <div className="sticky top-0 bg-slate-800 border-b border-slate-900 z-10">
-          <div className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 font-semibold text-sm text-white">
+          <div className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 font-semibold text-sm text-white min-w-[1650px]">
             <div className="text-center">#</div>
             <div className="font-semibold">HSE Actions & Requirements</div>
             {periods.slice(0, 12).map(period => (
@@ -504,7 +504,7 @@ export function KpiGrid() {
               {items.map((item, index) => (
                 <div
                   key={item.kpi.kpi_id}
-                  className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 border-b border-slate-200 hover:bg-slate-50 text-sm bg-white"
+                  className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 border-b border-slate-200 hover:bg-slate-50 text-sm bg-white min-w-[1650px]"
                 >
                   <div className="text-center font-semibold text-sm text-slate-700">
                     {section.order_idx}.{index + 1}
