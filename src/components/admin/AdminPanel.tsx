@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { supabase } from '@/lib/supabase/client';
+import { supabaseClient } from '@/lib/supabase/client';
 import { TemplateManager } from '@/components/templates/TemplateManager';
 import { 
   Users, 
@@ -37,6 +37,12 @@ interface User {
   last_sign_in_at: string | null;
   role: string;
   is_active: boolean;
+}
+
+interface UserRoleResult {
+  role: {
+    name: string;
+  } | null;
 }
 
 interface AuditLog {
@@ -157,40 +163,81 @@ export function AdminPanel() {
   const loadUsers = async () => {
     console.log('Loading users...');
     
-    const { data, error } = await supabase
-      .from('app_user')
-      .select(`
-        user_id,
-        email,
-        display_name,
-        department,
-        created_at,
-        last_login_at,
-        is_active,
-        user_role (
-          role (
-            name
+    try {
+      // Use a simpler approach with a single query using proper joins
+      const { data: usersWithRoles, error: usersError } = await supabaseClient
+        .from('app_user')
+        .select(`
+          user_id,
+          email,
+          display_name,
+          department,
+          created_at,
+          last_login_at,
+          is_active,
+          user_role!inner (
+            role (
+              name
+            )
           )
-        )
-      `)
-      .order('created_at', { ascending: false });
+        `)
+        .order('created_at', { ascending: false });
 
-    console.log('Users query result:', { data, error });
+      console.log('Users with roles query result:', { usersWithRoles, usersError });
 
-    if (!error && data) {
-      const usersWithRoles = data.map(user => ({
-        id: user.user_id,
-        email: user.email,
-        display_name: user.display_name,
-        department: user.department,
-        created_at: user.created_at,
-        last_sign_in_at: user.last_login_at,
-        is_active: user.is_active,
-        role: (user.user_role as any)?.[0]?.role?.name || 'Viewer'
-      }));
-      console.log('Processed users:', usersWithRoles);
-      setUsers(usersWithRoles);
-    } else {
+      if (usersError) {
+        console.error('Error loading users:', usersError);
+        // Fallback: try loading users without roles
+        const { data: basicUsers, error: basicError } = await supabaseClient
+          .from('app_user')
+          .select('user_id, email, display_name, department, created_at, last_login_at, is_active')
+          .order('created_at', { ascending: false });
+          
+        if (!basicError && basicUsers) {
+          const usersWithDefaultRoles = basicUsers.map(user => ({
+            id: user.user_id,
+            email: user.email,
+            display_name: user.display_name,
+            department: user.department,
+            created_at: user.created_at,
+            last_sign_in_at: user.last_login_at,
+            is_active: user.is_active ?? true,
+            role: 'viewer' // Default role
+          }));
+          console.log('Loaded users with default roles:', usersWithDefaultRoles);
+          setUsers(usersWithDefaultRoles);
+        } else {
+          setUsers([]);
+        }
+        return;
+      }
+
+      if (!usersWithRoles || usersWithRoles.length === 0) {
+        console.log('No users found in database');
+        setUsers([]);
+        return;
+      }
+
+      // Process the joined data
+      const processedUsers = usersWithRoles.map((user: any) => {
+        const roleData = user.user_role?.[0]?.role;
+        const roleName = roleData?.name || 'viewer';
+        
+        return {
+          id: user.user_id,
+          email: user.email,
+          display_name: user.display_name,
+          department: user.department,
+          created_at: user.created_at,
+          last_sign_in_at: user.last_login_at,
+          is_active: user.is_active ?? true,
+          role: roleName
+        };
+      });
+
+      console.log('Processed users with roles:', processedUsers);
+      setUsers(processedUsers);
+    } catch (error) {
       console.error('Error loading users:', error);
       setUsers([]);
     }
@@ -199,7 +246,7 @@ export function AdminPanel() {
   const loadAuditLogs = async () => {
     console.log('Loading audit logs...');
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('change_set')
       .select(`
         change_id,
@@ -245,7 +292,7 @@ export function AdminPanel() {
   };
 
   const loadTemplates = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('export_template')
       .select('*')
       .order('created_at', { ascending: false });
@@ -257,16 +304,16 @@ export function AdminPanel() {
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('app_user')
         .update({ is_active: !currentStatus })
-        .eq('id', userId);
+        .eq('user_id', userId);
 
       if (!error) {
         loadUsers();
         
         // Log the action
-        await supabase
+        await supabaseClient
           .from('change_set')
           .insert({
             entity: 'app_user',
@@ -287,13 +334,13 @@ export function AdminPanel() {
   const changeUserRole = async (userId: string, newRoleId: string) => {
     try {
       // First remove existing role
-      await supabase
+      await supabaseClient
         .from('user_role')
         .delete()
         .eq('user_id', userId);
 
       // Add new role
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('user_role')
         .insert({
           user_id: userId,
@@ -304,7 +351,7 @@ export function AdminPanel() {
         loadUsers();
         
         // Log the action
-        await supabase
+        await supabaseClient
           .from('change_set')
           .insert({
             entity: 'user_role',

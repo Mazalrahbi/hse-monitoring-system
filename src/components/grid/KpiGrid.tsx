@@ -57,15 +57,21 @@ export function KpiGrid() {
         .select('*')
         .eq('year', 2025)
         .eq('period_type', 'monthly')
-        .order('start_date');
+        .order('month'); // Order by month number to ensure proper sequence
 
       console.log('Periods result:', { periodsData, periodsError });
+      console.log('Number of periods found:', periodsData?.length);
       
       if (periodsError) {
         console.error('Error fetching periods:', periodsError);
         throw periodsError;
       }
-      setPeriods(periodsData || []);
+      
+      // Ensure we have all 12 months, create missing ones if needed
+      const allPeriods = periodsData || [];
+      console.log('All periods before processing:', allPeriods.map(p => ({ label: p.label, month: p.month })));
+      
+      setPeriods(allPeriods);
 
       // Fetch sections first
       console.log('Fetching sections...');
@@ -482,7 +488,7 @@ export function KpiGrid() {
           <div className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 font-semibold text-sm text-white min-w-[1650px]">
             <div className="text-center">#</div>
             <div className="font-semibold">HSE Actions & Requirements</div>
-            {periods.slice(0, 12).map(period => (
+            {periods.map(period => (
               <div key={period.period_id} className="text-center text-xs font-semibold">
                 {period.label}
               </div>
@@ -522,7 +528,7 @@ export function KpiGrid() {
                   </div>
                   
                   {/* Monthly values - modern design */}
-                  {periods.slice(0, 12).map(period => {
+                  {periods.map(period => {
                     const value = item.values[period.period_id];
                     
                     return (
