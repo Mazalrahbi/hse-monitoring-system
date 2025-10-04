@@ -7,6 +7,7 @@ import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { AdminPanel } from '@/components/admin/AdminPanel';
 import { excelExportService } from '@/lib/services/excelExport';
+import { ToastProvider } from '@/components/ui/toast';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -94,7 +95,8 @@ export function AppWrapper() {
 
   // Show main application
   return (
-    <div className="min-h-screen bg-white">
+    <ToastProvider>
+      <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-full mx-auto px-4 py-4">
@@ -251,6 +253,7 @@ export function AppWrapper() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </ToastProvider>
   );
 }

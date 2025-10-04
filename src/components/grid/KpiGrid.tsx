@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabaseClient } from '@/lib/supabase/client';
 import { KpiValue, Kpi, KpiPeriod, Section, KpiStatus } from '@/lib/types/database';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Eye, Edit2, Save, X } from 'lucide-react';
+import { Upload, Eye, Edit2, Save, X, Loader2 } from 'lucide-react';
 
 interface GridData {
   kpi: Kpi;
@@ -17,9 +18,12 @@ interface GridData {
 
 export function KpiGrid() {
   const { appUser } = useAuth();
+  const { success, error } = useToast();
   const [gridData, setGridData] = useState<GridData[]>([]);
   const [periods, setPeriods] = useState<KpiPeriod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
+  const [updatingCells, setUpdatingCells] = useState<Set<string>>(new Set());
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
@@ -138,13 +142,18 @@ export function KpiGrid() {
   }, [loadData]);
 
   const updateKpiValue = async (kpiId: string, periodId: string, newStatus: KpiStatus, newValue?: string) => {
+    const cellId = `${kpiId}-${periodId}`;
+    
     try {
+      // Add to saving state for smooth animation
+      setSavingCells(prev => new Set([...prev, cellId]));
+      
       console.log('Updating KPI value:', { kpiId, periodId, newStatus, newValue });
       
       const existingValue = gridData
         .find(item => item.kpi.kpi_id === kpiId)?.values[periodId];
 
-      // Get KPI and Period info for audit logging
+      // Get KPI and Period info for audit logging and user feedback
       const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
       const period = periods.find(p => p.period_id === periodId);
       
@@ -237,18 +246,43 @@ export function KpiGrid() {
 
       if (result.error) {
         console.error('Database error:', result.error);
-        alert(`Failed to save: ${result.error.message}`);
+        error('Save Failed', `Could not save KPI update: ${result.error.message}`);
         return false;
       }
 
+      // Show success with smooth animation
+      setUpdatingCells(prev => new Set([...prev, cellId]));
+      
       // Reload data
       await loadData();
-      alert('Saved successfully!');
+      
+      // Success notification
+      success(
+        'KPI Updated',
+        `${kpiItem?.kpi.name || 'KPI'} updated for ${period?.label || 'period'}`
+      );
+      
+      // Remove from updating state after animation
+      setTimeout(() => {
+        setUpdatingCells(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(cellId);
+          return newSet;
+        });
+      }, 1000);
+      
       return true;
-    } catch (error) {
-      console.error('Error updating KPI value:', error);
-      alert(`Error: ${error}`);
+    } catch (err) {
+      console.error('Error updating KPI value:', err);
+      error('Update Error', `Failed to update KPI: ${err instanceof Error ? err.message : 'Unknown error'}`);
       return false;
+    } finally {
+      // Remove from saving state
+      setSavingCells(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cellId);
+        return newSet;
+      });
     }
   };
 
@@ -284,6 +318,16 @@ export function KpiGrid() {
   const handleQuickSave = async (kpiId: string, periodId: string, value: string, status: KpiStatus) => {
     const success = await updateKpiValue(kpiId, periodId, status, value);
     return success;
+  };
+
+  // Helper function to check if a cell is being saved
+  const isCellSaving = (kpiId: string, periodId: string) => {
+    return savingCells.has(`${kpiId}-${periodId}`);
+  };
+
+  // Helper function to check if a cell is updating (success animation)
+  const isCellUpdating = (kpiId: string, periodId: string) => {
+    return updatingCells.has(`${kpiId}-${periodId}`);
   };
 
   const handleHeaderEdit = (type: 'contractor' | 'pdo') => {
@@ -483,54 +527,86 @@ export function KpiGrid() {
                     
                     return (
                       <div key={period.period_id} className="space-y-2">
-                        {/* Value input with color coding */}
-                        <input
-                          type="text"
-                          defaultValue={value?.text_value || value?.numeric_value?.toString() || ''}
-                          className={`w-full text-center text-base font-bold border-2 rounded px-2 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${getValueColorClass(value?.text_value || value?.numeric_value?.toString())}`}
-                          placeholder="0"
-                          onBlur={(e) => {
-                            const newValue = e.target.value;
-                            if (newValue !== (value?.text_value || value?.numeric_value?.toString() || '')) {
-                              handleQuickSave(item.kpi.kpi_id, period.period_id, newValue, value?.status || 'not_started');
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.currentTarget.blur();
-                            }
-                          }}
-                        />
+                        {/* Value input with color coding and animations */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            defaultValue={value?.text_value || value?.numeric_value?.toString() || ''}
+                            className={`w-full text-center text-base font-bold border-2 rounded px-2 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 ${
+                              isCellSaving(item.kpi.kpi_id, period.period_id) 
+                                ? 'opacity-70 cursor-wait' 
+                                : isCellUpdating(item.kpi.kpi_id, period.period_id)
+                                  ? 'ring-2 ring-green-400 border-green-400 bg-green-50' 
+                                  : getValueColorClass(value?.text_value || value?.numeric_value?.toString())
+                            }`}
+                            placeholder="0"
+                            disabled={isCellSaving(item.kpi.kpi_id, period.period_id)}
+                            onBlur={(e) => {
+                              const newValue = e.target.value;
+                              if (newValue !== (value?.text_value || value?.numeric_value?.toString() || '')) {
+                                handleQuickSave(item.kpi.kpi_id, period.period_id, newValue, value?.status || 'not_started');
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                              }
+                            }}
+                          />
+                          
+                          {/* Loading spinner overlay */}
+                          {isCellSaving(item.kpi.kpi_id, period.period_id) && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded">
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            </div>
+                          )}
+                        </div>
                         
-                        {/* Modern status dropdown */}
-                        <Select
-                          value={value?.status || 'not_started'}
-                          onValueChange={(newStatus: KpiStatus) => {
-                            const currentValue = value?.text_value || value?.numeric_value?.toString() || '';
-                            handleQuickSave(item.kpi.kpi_id, period.period_id, currentValue, newStatus);
-                          }}
-                        >
-                          <SelectTrigger className="w-full h-10 text-sm font-semibold border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-50 focus:ring-2 focus:ring-blue-500">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white border-2 border-slate-300 shadow-lg min-w-32">
-                            <SelectItem value="not_started" className="text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer py-2">
-                              Not Started
-                            </SelectItem>
-                            <SelectItem value="in_progress" className="text-sm font-semibold text-amber-800 hover:bg-amber-50 cursor-pointer py-2">
-                              In Progress
-                            </SelectItem>
-                            <SelectItem value="done" className="text-sm font-semibold text-green-800 hover:bg-green-50 cursor-pointer py-2">
-                              Done
-                            </SelectItem>
-                            <SelectItem value="blocked" className="text-sm font-semibold text-red-800 hover:bg-red-50 cursor-pointer py-2">
-                              Blocked
-                            </SelectItem>
-                            <SelectItem value="needs_review" className="text-sm font-semibold text-blue-800 hover:bg-blue-50 cursor-pointer py-2">
-                              Needs Review
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {/* Modern status dropdown with animations */}
+                        <div className="relative">
+                          <Select
+                            value={value?.status || 'not_started'}
+                            disabled={isCellSaving(item.kpi.kpi_id, period.period_id)}
+                            onValueChange={(newStatus: KpiStatus) => {
+                              const currentValue = value?.text_value || value?.numeric_value?.toString() || '';
+                              handleQuickSave(item.kpi.kpi_id, period.period_id, currentValue, newStatus);
+                            }}
+                          >
+                            <SelectTrigger className={`w-full h-10 text-sm font-semibold border-2 bg-white text-slate-900 hover:bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all duration-300 ${
+                              isCellSaving(item.kpi.kpi_id, period.period_id) 
+                                ? 'opacity-70 cursor-wait border-slate-300' 
+                                : isCellUpdating(item.kpi.kpi_id, period.period_id)
+                                  ? 'border-green-400 ring-2 ring-green-400 bg-green-50'
+                                  : 'border-slate-400'
+                            }`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white border-2 border-slate-300 shadow-lg min-w-32">
+                              <SelectItem value="not_started" className="text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer py-2">
+                                Not Started
+                              </SelectItem>
+                              <SelectItem value="in_progress" className="text-sm font-semibold text-amber-800 hover:bg-amber-50 cursor-pointer py-2">
+                                In Progress
+                              </SelectItem>
+                              <SelectItem value="done" className="text-sm font-semibold text-green-800 hover:bg-green-50 cursor-pointer py-2">
+                                Done
+                              </SelectItem>
+                              <SelectItem value="blocked" className="text-sm font-semibold text-red-800 hover:bg-red-50 cursor-pointer py-2">
+                                Blocked
+                              </SelectItem>
+                              <SelectItem value="needs_review" className="text-sm font-semibold text-blue-800 hover:bg-blue-50 cursor-pointer py-2">
+                                Needs Review
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          
+                          {/* Loading spinner overlay for select */}
+                          {isCellSaving(item.kpi.kpi_id, period.period_id) && (
+                            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                              <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
