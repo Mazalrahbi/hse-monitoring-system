@@ -140,34 +140,51 @@ export function SettingsPage() {
   };
 
   const saveProfile = async () => {
-    if (!userProfile || !appUser) return;
+    if (!userProfile || !appUser) {
+      console.error('Missing data:', { userProfile: !!userProfile, appUser: !!appUser });
+      alert('Error: User data not loaded. Please refresh the page.');
+      return;
+    }
 
     setSaving(true);
     try {
       console.log('Saving profile for user_id:', appUser.user_id);
+      console.log('Current auth user:', user?.id);
+      console.log('App user auth_user_id:', appUser.auth_user_id);
+      console.log('Data to save:', { display_name: displayName.trim() || null, department: department.trim() || null });
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('app_user')
         .update({
           display_name: displayName.trim() || null,
           department: department.trim() || null
         })
-        .eq('user_id', appUser.user_id);
+        .eq('user_id', appUser.user_id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error details:', error);
+        throw error;
+      }
 
-      // Log the change
-      await supabase
-        .from('change_set')
-        .insert({
-          entity: 'app_user',
-          entity_id: appUser.user_id,
-          field: 'profile_update',
-          new_value: JSON.stringify({ display_name: displayName, department }),
-          changed_by: appUser.user_id,
-          reason: 'Profile update from settings',
-          source_page: '/settings'
-        });
+      console.log('Profile update successful:', data);
+
+      // Try to log the change (optional - don't fail if this fails)
+      try {
+        await supabase
+          .from('change_set')
+          .insert({
+            entity: 'app_user',
+            entity_id: appUser.user_id,
+            field: 'profile_update',
+            new_value: JSON.stringify({ display_name: displayName, department }),
+            changed_by: appUser.user_id,
+            reason: 'Profile update from settings',
+            source_page: '/settings'
+          });
+      } catch (auditError) {
+        console.warn('Audit logging failed (non-critical):', auditError);
+      }
 
       setUserProfile({
         ...userProfile,
@@ -176,9 +193,9 @@ export function SettingsPage() {
       });
 
       alert('Profile updated successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      alert('Failed to update profile');
+      alert(`Failed to update profile: ${error?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
