@@ -23,10 +23,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
     
     const initializeAuth = async () => {
       try {
         console.log('Initializing auth...');
+        
+        // Set a safety timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          if (mounted) {
+            console.warn('Auth initialization timeout - setting loading to false');
+            setLoading(false);
+          }
+        }, 10000); // 10 second timeout
         
         const { data: { session }, error } = await supabaseClient.auth.getSession();
 
@@ -36,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
             setAppUser(null);
             setLoading(false);
+            clearTimeout(timeoutId);
           }
           return;
         }
@@ -48,9 +58,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (session?.user) {
             console.log('Fetching app user for:', session.user.id);
             await fetchAppUser(session.user.id);
+          } else {
+            setAppUser(null);
           }
           
           setLoading(false);
+          clearTimeout(timeoutId);
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -58,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           setAppUser(null);
           setLoading(false);
+          clearTimeout(timeoutId);
         }
       }
     };
@@ -71,6 +85,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Auth state changed:', event, !!session);
       
       if (mounted) {
+        // Don't set loading to true for subsequent auth changes
+        // Only set it for the initial load
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -78,11 +94,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setAppUser(null);
         }
+        
+        // Ensure loading is false after handling auth change
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          setLoading(false);
+        }
       }
     });
 
     return () => {
       mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -91,11 +113,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Fetching app user for auth_user_id:', authUserId);
       
-      const { data, error } = await supabaseClient
+      // Add timeout for database queries
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Database query timeout')), 8000)
+      );
+      
+      const queryPromise = supabaseClient
         .from('app_user')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single();
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('Error fetching app user:', error);
@@ -116,7 +145,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAppUser(data);
     } catch (error) {
       console.error('Error fetching app user:', error);
+      // Always set appUser to null if there's an error to prevent infinite loading
       setAppUser(null);
+      
+      // If this is a timeout or connection error, we should still allow the app to continue
+      if (error instanceof Error && error.message.includes('timeout')) {
+        console.warn('Database timeout - continuing with limited functionality');
+      }
     }
   };
 
