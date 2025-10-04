@@ -240,19 +240,6 @@ export function AppWrapper() {
         )}
       </main>
 
-      {/* Status Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t-2 border-gray-700 px-4 py-2 z-10">
-        <div className="flex items-center justify-between text-sm font-medium text-white">
-          <div className="flex items-center space-x-4">
-            <span>🟢 Connected to Supabase</span>
-            <span>👤 {appUser.display_name || appUser.email}</span>
-            <span>📝 Last sync: just now</span>
-          </div>
-          <div>
-            Built with Next.js • Supabase • Real-time collaboration
-          </div>
-        </div>
-      </div>
       </div>
     </ToastProvider>
   );
