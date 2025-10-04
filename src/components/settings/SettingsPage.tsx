@@ -37,7 +37,7 @@ interface UserSettings {
 }
 
 export function SettingsPage() {
-  const { user } = useAuth();
+  const { user, appUser } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettings>({
     notifications_enabled: true,
@@ -54,39 +54,51 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (appUser) {
       loadUserProfile();
       loadUserSettings();
     }
-  }, [user]);
+  }, [appUser]);
 
   const loadUserProfile = async () => {
+    if (!appUser) return;
+    
     try {
+      console.log('Loading profile for user_id:', appUser.user_id);
+      
       const { data, error } = await supabase
         .from('app_user')
         .select(`
-          id,
+          user_id,
           email,
           display_name,
           department,
           created_at
         `)
-        .eq('id', user?.id)
+        .eq('user_id', appUser.user_id)
         .single();
 
       if (error) throw error;
 
-      // Get user role separately for now
+      // Get user role separately
       const { data: roleData } = await supabase
         .from('user_role')
-        .select('role(name)')
-        .eq('user_id', user?.id)
+        .select(`
+          role (
+            name
+          )
+        `)
+        .eq('user_id', appUser.user_id)
         .limit(1)
         .single();
 
       const profile: UserProfile = {
-        ...data,
-        role: (roleData as any)?.role?.name || 'User'
+        id: data.user_id,
+        email: data.email,
+        display_name: data.display_name,
+        department: data.department,
+        created_at: data.created_at,
+        role: (roleData as any)?.role?.name || 'Viewer'
       };
 
       setUserProfile(profile);
@@ -98,11 +110,15 @@ export function SettingsPage() {
   };
 
   const loadUserSettings = async () => {
+    if (!appUser) return;
+    
     try {
+      console.log('Loading settings for user_id:', appUser.user_id);
+      
       const { data, error } = await supabase
         .from('user_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', appUser.user_id)
         .single();
 
       if (data) {
@@ -124,17 +140,19 @@ export function SettingsPage() {
   };
 
   const saveProfile = async () => {
-    if (!userProfile) return;
+    if (!userProfile || !appUser) return;
 
     setSaving(true);
     try {
+      console.log('Saving profile for user_id:', appUser.user_id);
+      
       const { error } = await supabase
         .from('app_user')
         .update({
           display_name: displayName.trim() || null,
           department: department.trim() || null
         })
-        .eq('id', userProfile.id);
+        .eq('user_id', appUser.user_id);
 
       if (error) throw error;
 
@@ -143,10 +161,10 @@ export function SettingsPage() {
         .from('change_set')
         .insert({
           entity: 'app_user',
-          entity_id: userProfile.id,
+          entity_id: appUser.user_id,
           field: 'profile_update',
           new_value: JSON.stringify({ display_name: displayName, department }),
-          changed_by: userProfile.id,
+          changed_by: appUser.user_id,
           reason: 'Profile update from settings',
           source_page: '/settings'
         });
@@ -167,14 +185,16 @@ export function SettingsPage() {
   };
 
   const saveSettings = async () => {
-    if (!user) return;
+    if (!appUser) return;
 
     setSaving(true);
     try {
+      console.log('Saving settings for user_id:', appUser.user_id);
+      
       const { error } = await supabase
         .from('user_settings')
         .upsert({
-          user_id: user.id,
+          user_id: appUser.user_id,
           ...userSettings
         });
 
