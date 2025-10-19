@@ -1,19 +1,47 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabaseClient } from '@/lib/supabase/client';
-import { KpiValue, Kpi, KpiPeriod, Section, KpiStatus } from '@/lib/types/database';
+import { KpiValue, Kpi, KpiPeriod, Section, KpiStatus, KpiAttachment } from '@/lib/types/database';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Eye, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { 
+  Loader2, 
+  Paperclip, 
+  Calendar,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  XCircle,
+  PlayCircle,
+  Save,
+  X,
+  Edit2,
+  Upload,
+  Eye,
+  Download,
+  Trash2,
+  FileText,
+  Image as ImageIcon,
+  File,
+  Plus
+} from 'lucide-react';
 
 interface GridData {
   kpi: Kpi;
   values: { [periodId: string]: KpiValue };
   section: Section;
+}
+
+interface AttachmentModalState {
+  isOpen: boolean;
+  kpiId: string | null;
+  periodId: string | null;
+  kpiName: string;
+  periodName: string;
 }
 
 export function KpiGrid() {
@@ -23,101 +51,65 @@ export function KpiGrid() {
   const [periods, setPeriods] = useState<KpiPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
-  const [updatingCells, setUpdatingCells] = useState<Set<string>>(new Set());
-  const [editingCell, setEditingCell] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [editingStatus, setEditingStatus] = useState<string | null>(null);
-  const [contractorName, setContractorName] = useState('test');
-  const [pdoHolder, setPdoHolder] = useState('test');
+  const [contractorName, setContractorName] = useState('Black Gold Integrated Solutions - PDO Nimr');
+  const [pdoHolder, setPdoHolder] = useState('Al Salti Anwar, UPKC1');
   const [editingHeader, setEditingHeader] = useState<'contractor' | 'pdo' | null>(null);
   const [headerEditValue, setHeaderEditValue] = useState('');
+  
+  // Attachment states
+  const [attachmentModal, setAttachmentModal] = useState<AttachmentModalState>({
+    isOpen: false,
+    kpiId: null,
+    periodId: null,
+    kpiName: '',
+    periodName: ''
+  });
+  const [attachments, setAttachments] = useState<KpiAttachment[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load data
   const loadData = useCallback(async () => {
     try {
-      console.log('Starting to load data...');
+      console.log('Starting to load KPI data...');
       
-      // Test basic connection first
-      const { data: testData, error: testError } = await supabaseClient
-        .from('org_site')
-        .select('*')
-        .limit(1);
-      
-      console.log('Test connection result:', { testData, testError });
-      
-      if (testError) {
-        console.error('Database connection failed:', testError);
-        return;
-      }
-
       // Fetch periods for 2025
-      console.log('Fetching periods...');
       const { data: periodsData, error: periodsError } = await supabaseClient
         .from('kpi_period')
         .select('*')
         .eq('year', 2025)
         .eq('period_type', 'monthly')
-        .order('month'); // Order by month number to ensure proper sequence
+        .order('month');
 
-      console.log('Periods result:', { periodsData, periodsError });
-      console.log('Number of periods found:', periodsData?.length);
-      
-      if (periodsError) {
-        console.error('Error fetching periods:', periodsError);
-        throw periodsError;
-      }
-      
-      // Ensure we have all 12 months, create missing ones if needed
-      const allPeriods = periodsData || [];
-      console.log('All periods before processing:', allPeriods.map(p => ({ label: p.label, month: p.month })));
-      
-      setPeriods(allPeriods);
+      if (periodsError) throw periodsError;
+      setPeriods(periodsData || []);
 
-      // Fetch sections first
-      console.log('Fetching sections...');
+      // Fetch sections
       const { data: sectionsData, error: sectionsError } = await supabaseClient
         .from('section')
         .select('*')
         .order('order_idx');
         
-      console.log('Sections result:', { sectionsData, sectionsError });
-      
-      if (sectionsError) {
-        console.error('Error fetching sections:', sectionsError);
-        throw sectionsError;
-      }
+      if (sectionsError) throw sectionsError;
 
       // Fetch KPIs
-      console.log('Fetching KPIs...');
       const { data: kpisData, error: kpisError } = await supabaseClient
         .from('kpi')
         .select('*')
         .eq('is_active', true)
         .order('code');
 
-      console.log('KPIs result:', { kpisData, kpisError });
-      
-      if (kpisError) {
-        console.error('Error fetching KPIs:', kpisError);
-        throw kpisError;
-      }
+      if (kpisError) throw kpisError;
 
-      // Fetch KPI values
-      console.log('Fetching KPI values...');
+      // Fetch KPI values with attachment counts
       const { data: valuesData, error: valuesError } = await supabaseClient
         .from('kpi_value')
-        .select('*');
+        .select('*, attachment_count');
 
-      console.log('Values result:', { valuesData, valuesError });
-      
-      if (valuesError) {
-        console.error('Error fetching KPI values:', valuesError);
-        throw valuesError;
-      }
+      if (valuesError) throw valuesError;
 
       // Organize data
       const organized = (kpisData || []).map(kpi => {
-        // Find section for this KPI
         const section = sectionsData?.find(s => s.section_id === kpi.section_id);
         
         const values: { [periodId: string]: KpiValue } = {};
@@ -130,80 +122,52 @@ export function KpiGrid() {
         return {
           kpi,
           values,
-          section: section || { section_id: kpi.section_id, name: 'Unknown Section', code: 'UNK', order_idx: 999 }
+          section: section || { 
+            section_id: kpi.section_id, 
+            name: 'Unknown Section', 
+            code: 'UNK', 
+            order_idx: 999,
+            description: null,
+            site_id: '',
+            is_active: true,
+            created_at: '',
+            updated_at: ''
+          }
         };
       });
 
-      console.log('Organized data:', organized);
       setGridData(organized);
-    } catch (error) {
-      console.error('Error loading data:', error);
+    } catch (err) {
+      console.error('Error loading data:', err);
+      error('Load Error', 'Failed to load KPI data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [error]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const updateKpiValue = async (kpiId: string, periodId: string, newStatus: KpiStatus, newValue?: string) => {
+  const updateKpiValue = async (kpiId: string, periodId: string, newValue: string) => {
     const cellId = `${kpiId}-${periodId}`;
     
     try {
-      // Add to saving state for smooth animation
       setSavingCells(prev => new Set([...prev, cellId]));
-      
-      console.log('Updating KPI value:', { kpiId, periodId, newStatus, newValue });
       
       const existingValue = gridData
         .find(item => item.kpi.kpi_id === kpiId)?.values[periodId];
 
-      // Get KPI and Period info for audit logging and user feedback
-      const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
-      const period = periods.find(p => p.period_id === periodId);
-      
       let result;
-      let auditEntityId = existingValue?.value_id;
+      const numericValue = !isNaN(Number(newValue)) ? Number(newValue) : null;
 
       if (existingValue) {
         // Update existing
-        console.log('Updating existing value:', existingValue.value_id);
-        
-        // Log the change BEFORE making it
-        if (appUser) {
-          const oldValues = {
-            status: existingValue.status,
-            text_value: existingValue.text_value,
-            numeric_value: existingValue.numeric_value
-          };
-          
-          const newValues = {
-            status: newStatus,
-            text_value: newValue || existingValue.text_value,
-            numeric_value: newValue && !isNaN(Number(newValue)) ? Number(newValue) : existingValue.numeric_value
-          };
-
-          await supabaseClient
-            .from('change_set')
-            .insert({
-              entity: 'kpi_value',
-              entity_id: existingValue.value_id,
-              field: 'kpi_update',
-              old_value: JSON.stringify(oldValues),
-              new_value: JSON.stringify(newValues),
-              changed_by: appUser.user_id,
-              reason: `Updated KPI "${kpiItem?.kpi.name}" for period "${period?.label}"`,
-              source_page: '/grid'
-            });
-        }
-
         result = await supabaseClient
           .from('kpi_value')
           .update({
-            status: newStatus,
-            text_value: newValue || existingValue.text_value,
-            numeric_value: newValue && !isNaN(Number(newValue)) ? Number(newValue) : existingValue.numeric_value,
+            text_value: newValue,
+            numeric_value: numericValue,
             updated_at: new Date().toISOString(),
             version: existingValue.version + 1
           })
@@ -211,79 +175,39 @@ export function KpiGrid() {
           .select();
       } else {
         // Create new
-        console.log('Creating new value');
         result = await supabaseClient
           .from('kpi_value')
           .insert({
             kpi_id: kpiId,
             period_id: periodId,
-            status: newStatus,
+            status: 'not_started' as KpiStatus,
             text_value: newValue,
-            numeric_value: newValue && !isNaN(Number(newValue)) ? Number(newValue) : null,
+            numeric_value: numericValue,
           })
           .select();
-
-        // Log the creation
-        if (result.data && result.data[0] && appUser) {
-          auditEntityId = result.data[0].value_id;
-          
-          await supabaseClient
-            .from('change_set')
-            .insert({
-              entity: 'kpi_value',
-              entity_id: result.data[0].value_id,
-              field: 'kpi_create',
-              old_value: null,
-              new_value: JSON.stringify({
-                status: newStatus,
-                text_value: newValue,
-                numeric_value: newValue && !isNaN(Number(newValue)) ? Number(newValue) : null,
-                kpi_name: kpiItem?.kpi.name,
-                period_label: period?.label
-              }),
-              changed_by: appUser.user_id,
-              reason: `Created new KPI value for "${kpiItem?.kpi.name}" in period "${period?.label}"`,
-              source_page: '/grid'
-            });
-        }
       }
 
-      console.log('Database result:', result);
-
       if (result.error) {
-        console.error('Database error:', result.error);
         error('Save Failed', `Could not save KPI update: ${result.error.message}`);
         return false;
       }
 
-      // Show success with smooth animation
-      setUpdatingCells(prev => new Set([...prev, cellId]));
-      
-      // Reload data
       await loadData();
       
-      // Success notification
+      const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
+      const period = periods.find(p => p.period_id === periodId);
+      
       success(
         'KPI Updated',
         `${kpiItem?.kpi.name || 'KPI'} updated for ${period?.label || 'period'}`
       );
       
-      // Remove from updating state after animation
-      setTimeout(() => {
-        setUpdatingCells(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(cellId);
-          return newSet;
-        });
-      }, 1000);
-      
       return true;
     } catch (err) {
       console.error('Error updating KPI value:', err);
-      error('Update Error', `Failed to update KPI: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      error('Update Error', `Failed to update KPI`);
       return false;
     } finally {
-      // Remove from saving state
       setSavingCells(prev => {
         const newSet = new Set(prev);
         newSet.delete(cellId);
@@ -292,48 +216,93 @@ export function KpiGrid() {
     }
   };
 
-  const getStatusColor = (status: KpiStatus) => {
+  const updateKpiStatus = async (kpiId: string, periodId: string, newStatus: KpiStatus) => {
+    const cellId = `${kpiId}-${periodId}`;
+    
+    try {
+      setSavingCells(prev => new Set([...prev, cellId]));
+      
+      const existingValue = gridData
+        .find(item => item.kpi.kpi_id === kpiId)?.values[periodId];
+
+      let result;
+
+      if (existingValue) {
+        result = await supabaseClient
+          .from('kpi_value')
+          .update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+            version: existingValue.version + 1
+          })
+          .eq('value_id', existingValue.value_id)
+          .select();
+      } else {
+        result = await supabaseClient
+          .from('kpi_value')
+          .insert({
+            kpi_id: kpiId,
+            period_id: periodId,
+            status: newStatus,
+          })
+          .select();
+      }
+
+      if (result.error) {
+        error('Save Failed', `Could not save status update: ${result.error.message}`);
+        return false;
+      }
+
+      await loadData();
+      success('Status Updated', 'KPI status has been updated successfully');
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating KPI status:', err);
+      error('Update Error', `Failed to update KPI status`);
+      return false;
+    } finally {
+      setSavingCells(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cellId);
+        return newSet;
+      });
+    }
+  };
+
+  const getStatusIcon = (status: KpiStatus) => {
+    const iconClass = "h-4 w-4";
     switch (status) {
-      case 'done': return 'bg-green-100 text-green-800';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800';
-      case 'not_started': return 'bg-gray-100 text-gray-800';
-      case 'blocked': return 'bg-red-100 text-red-800';
-      case 'needs_review': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'done': return <CheckCircle2 className={`${iconClass} text-emerald-600`} />;
+      case 'in_progress': return <Clock className={`${iconClass} text-amber-600`} />;
+      case 'not_started': return <PlayCircle className={`${iconClass} text-slate-500`} />;
+      case 'blocked': return <XCircle className={`${iconClass} text-red-600`} />;
+      case 'needs_review': return <AlertCircle className={`${iconClass} text-blue-600`} />;
+      default: return <PlayCircle className={`${iconClass} text-slate-500`} />;
     }
   };
 
-  const handleCellEdit = (kpiId: string, periodId: string, currentValue: string) => {
-    setEditingCell(`${kpiId}-${periodId}`);
-    setEditValue(currentValue);
-  };
-
-  const handleSaveEdit = async (kpiId: string, periodId: string, currentStatus: KpiStatus) => {
-    const success = await updateKpiValue(kpiId, periodId, currentStatus, editValue);
-    if (success) {
-      setEditingCell(null);
-      setEditValue('');
+  const getValueColorClass = (value: string | undefined) => {
+    const baseClasses = "w-full text-center text-base font-bold px-3 py-2 focus:outline-none transition-all duration-300 border-2 rounded-lg";
+    
+    if (!value || value === '') {
+      return `${baseClasses} bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700 border-slate-300 focus:border-slate-500`;
+    }
+    
+    const trimmedValue = value.trim();
+    if (trimmedValue === '1' || trimmedValue.toLowerCase() === 'done') {
+      return `${baseClasses} bg-gradient-to-br from-emerald-50 to-green-100 text-emerald-800 border-emerald-400 focus:border-emerald-500`;
+    } else if (trimmedValue === '0' || trimmedValue.toLowerCase().includes('progress')) {
+      return `${baseClasses} bg-gradient-to-br from-amber-50 to-orange-100 text-amber-800 border-amber-400 focus:border-amber-500`;
+    } else if (/^\d+$/.test(trimmedValue) && parseInt(trimmedValue) > 1) {
+      return `${baseClasses} bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800 border-blue-400 focus:border-blue-500`;
+    } else {
+      return `${baseClasses} bg-gradient-to-br from-white to-slate-50 text-slate-700 border-slate-300 focus:border-slate-500`;
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingCell(null);
-    setEditValue('');
-  };
-
-  const handleQuickSave = async (kpiId: string, periodId: string, value: string, status: KpiStatus) => {
-    const success = await updateKpiValue(kpiId, periodId, status, value);
-    return success;
-  };
-
-  // Helper function to check if a cell is being saved
   const isCellSaving = (kpiId: string, periodId: string) => {
     return savingCells.has(`${kpiId}-${periodId}`);
-  };
-
-  // Helper function to check if a cell is updating (success animation)
-  const isCellUpdating = (kpiId: string, periodId: string) => {
-    return updatingCells.has(`${kpiId}-${periodId}`);
   };
 
   const handleHeaderEdit = (type: 'contractor' | 'pdo') => {
@@ -344,10 +313,8 @@ export function KpiGrid() {
   const handleHeaderSave = () => {
     if (editingHeader === 'contractor') {
       setContractorName(headerEditValue);
-      // You could also save to database here if needed
     } else if (editingHeader === 'pdo') {
       setPdoHolder(headerEditValue);
-      // You could also save to database here if needed
     }
     setEditingHeader(null);
     setHeaderEditValue('');
@@ -358,25 +325,185 @@ export function KpiGrid() {
     setHeaderEditValue('');
   };
 
-  const getValueColorClass = (value: string | undefined) => {
-    if (!value || value === '') return 'bg-white text-slate-900 border-slate-400';
+  // Attachment functions
+  const openAttachmentModal = async (kpiId: string, periodId: string) => {
+    const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
+    const period = periods.find(p => p.period_id === periodId);
     
-    const trimmedValue = value.trim();
-    if (trimmedValue === '1') {
-      return 'bg-green-100 text-green-900 border-green-500';
-    } else if (trimmedValue === '0') {
-      return 'bg-orange-100 text-orange-900 border-orange-500';
-    } else if (/^\d+$/.test(trimmedValue)) {
-      return 'bg-red-100 text-red-900 border-red-500';
-    } else {
-      return 'bg-white text-slate-900 border-slate-400';
+    setAttachmentModal({
+      isOpen: true,
+      kpiId,
+      periodId,
+      kpiName: kpiItem?.kpi.name || 'KPI',
+      periodName: period?.label || 'Month'
+    });
+
+    await loadAttachments(kpiId, periodId);
+  };
+
+  const loadAttachments = async (kpiId: string, periodId: string) => {
+    try {
+      const kpiValue = gridData.find(item => item.kpi.kpi_id === kpiId)?.values[periodId];
+      if (!kpiValue) return;
+
+      const { data, error } = await supabaseClient
+        .from('kpi_attachment')
+        .select(`
+          *,
+          uploader:uploaded_by(display_name, email)
+        `)
+        .eq('kpi_value_id', kpiValue.value_id)
+        .eq('is_active', true)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setAttachments(data || []);
+    } catch (err) {
+      console.error('Error loading attachments:', err);
+      error('Load Error', 'Failed to load attachments');
     }
+  };
+
+  const handleFileUpload = async (files: FileList | null, kpiId: string, periodId: string) => {
+    if (!files || files.length === 0 || !appUser) return;
+
+    let kpiValue = gridData.find(item => item.kpi.kpi_id === kpiId)?.values[periodId];
+    
+    if (!kpiValue) {
+      const { data, error: createError } = await supabaseClient
+        .from('kpi_value')
+        .insert({
+          kpi_id: kpiId,
+          period_id: periodId,
+          status: 'not_started'
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        error('Upload Error', 'Failed to create KPI value for attachment');
+        return;
+      }
+      kpiValue = data;
+    }
+
+    if (!kpiValue) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const uploadId = `${kpiValue.value_id}-${file.name}`;
+      
+      try {
+        setUploadingFiles(prev => new Set([...prev, uploadId]));
+
+        const fileName = `${Date.now()}_${file.name}`;
+        const filePath = `kpi-attachments/${kpiValue.value_id}/${fileName}`;
+        
+        const { data: uploadData, error: uploadError } = await supabaseClient.storage
+          .from('attachments')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { error: insertError } = await supabaseClient
+          .from('kpi_attachment')
+          .insert({
+            kpi_value_id: kpiValue.value_id,
+            file_name: file.name,
+            file_path: uploadData.path,
+            file_size: file.size,
+            file_type: file.type,
+            uploaded_by: appUser.user_id
+          });
+
+        if (insertError) throw insertError;
+
+        success('Upload Success', `${file.name} uploaded successfully`);
+        
+        await loadAttachments(kpiId, periodId);
+        await loadData();
+        
+      } catch (err) {
+        console.error('Error uploading file:', err);
+        error('Upload Error', `Failed to upload ${file.name}`);
+      } finally {
+        setUploadingFiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(uploadId);
+          return newSet;
+        });
+      }
+    }
+  };
+
+  const downloadAttachment = async (attachment: KpiAttachment) => {
+    try {
+      const { data, error } = await supabaseClient.storage
+        .from('attachments')
+        .download(attachment.file_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      error('Download Error', 'Failed to download file');
+    }
+  };
+
+  const deleteAttachment = async (attachmentId: string) => {
+    try {
+      const { error } = await supabaseClient
+        .from('kpi_attachment')
+        .update({ is_active: false })
+        .eq('attachment_id', attachmentId);
+
+      if (error) throw error;
+
+      success('Delete Success', 'Attachment deleted successfully');
+      
+      if (attachmentModal.kpiId && attachmentModal.periodId) {
+        await loadAttachments(attachmentModal.kpiId, attachmentModal.periodId);
+        await loadData();
+      }
+    } catch (err) {
+      console.error('Error deleting attachment:', err);
+      error('Delete Error', 'Failed to delete attachment');
+    }
+  };
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) {
+      return <ImageIcon className="h-5 w-5 text-purple-600" />;
+    } else if (fileType.includes('pdf')) {
+      return <FileText className="h-5 w-5 text-red-600" />;
+    } else {
+      return <File className="h-5 w-5 text-blue-600" />;
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-900">Loading HSE Monitoring Plan...</div>
+      <div className="flex items-center justify-center h-64 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <div className="text-lg font-semibold text-slate-800">Loading HSE Monitoring Plan...</div>
+        </div>
       </div>
     );
   }
@@ -392,107 +519,184 @@ export function KpiGrid() {
   });
 
   return (
-    <div className="w-full overflow-x-auto overflow-y-visible">
-      <div className="min-w-[1800px]">
+    <div className="w-full overflow-x-auto overflow-y-visible bg-gradient-to-br from-slate-50 to-white">
+      <div className="min-w-[1900px]">
         {/* Header */}
-        <div className="bg-blue-600 text-white p-4 text-center">
-          <h1 className="text-2xl font-bold">2025 HSE Monitoring Plan</h1>
-          
-          {/* Contractor Name */}
-          <div className="text-sm mt-2 flex items-center justify-center">
-            <span className="mr-2">Contractor Name:</span>
-            {editingHeader === 'contractor' ? (
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={headerEditValue}
-                  onChange={(e) => setHeaderEditValue(e.target.value)}
-                  className="bg-white text-blue-600 px-3 py-1 rounded text-sm font-semibold min-w-80"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleHeaderSave();
-                    if (e.key === 'Escape') handleHeaderCancel();
-                  }}
-                />
-                <Button
-                  size="sm"
-                  className="h-7 px-2 bg-green-600 hover:bg-green-700 text-white"
-                  onClick={handleHeaderSave}
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 text-white p-6 shadow-xl">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold mb-3 tracking-wide">2025 HSE Monitoring Plan</h1>
+            
+            {/* Contractor Name */}
+            <div className="text-sm mt-2 flex items-center justify-center">
+              <span className="mr-2 font-medium">Contractor Name:</span>
+              {editingHeader === 'contractor' ? (
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={headerEditValue}
+                    onChange={(e) => setHeaderEditValue(e.target.value)}
+                    className="bg-white text-blue-700 px-4 py-2 rounded-lg text-sm font-semibold min-w-96 shadow-lg border-2 border-blue-200"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleHeaderSave();
+                      if (e.key === 'Escape') handleHeaderCancel();
+                    }}
+                  />
+                  <Button size="sm" className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg" onClick={handleHeaderSave}>
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white shadow-lg" onClick={handleHeaderCancel}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <span
+                  className="cursor-pointer hover:bg-blue-600 px-4 py-2 rounded-lg transition-all duration-200 shadow-lg bg-blue-500/50 backdrop-blur-sm"
+                  onClick={() => handleHeaderEdit('contractor')}
+                  title="Click to edit contractor name"
                 >
-                  <Save className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 px-2 bg-red-600 hover:bg-red-700 text-white"
-                  onClick={handleHeaderCancel}
+                  {contractorName}
+                </span>
+              )}
+            </div>
+            
+            {/* PDO Contract Holder */}
+            <div className="text-sm mt-2 flex items-center justify-center">
+              <span className="mr-2 font-medium">PDO Contract Holder:</span>
+              {editingHeader === 'pdo' ? (
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={headerEditValue}
+                    onChange={(e) => setHeaderEditValue(e.target.value)}
+                    className="bg-white text-blue-700 px-4 py-2 rounded-lg text-sm font-semibold min-w-80 shadow-lg border-2 border-blue-200"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleHeaderSave();
+                      if (e.key === 'Escape') handleHeaderCancel();
+                    }}
+                  />
+                  <Button size="sm" className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg" onClick={handleHeaderSave}>
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white shadow-lg" onClick={handleHeaderCancel}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <span
+                  className="cursor-pointer hover:bg-blue-600 px-4 py-2 rounded-lg transition-all duration-200 shadow-lg bg-blue-500/50 backdrop-blur-sm"
+                  onClick={() => handleHeaderEdit('pdo')}
+                  title="Click to edit PDO contract holder"
                 >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="cursor-pointer hover:bg-blue-500 px-3 py-1 rounded transition-colors"
-                onClick={() => handleHeaderEdit('contractor')}
-                title="Click to edit contractor name"
-              >
-                {contractorName}
-              </span>
-            )}
-          </div>
-          
-          {/* PDO Contract Holder */}
-          <div className="text-sm mt-1 flex items-center justify-center">
-            <span className="mr-2">PDO Contract Holder:</span>
-            {editingHeader === 'pdo' ? (
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={headerEditValue}
-                  onChange={(e) => setHeaderEditValue(e.target.value)}
-                  className="bg-white text-blue-600 px-3 py-1 rounded text-sm font-semibold min-w-60"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleHeaderSave();
-                    if (e.key === 'Escape') handleHeaderCancel();
-                  }}
-                />
-                <Button
-                  size="sm"
-                  className="h-7 px-2 bg-green-600 hover:bg-green-700 text-white"
-                  onClick={handleHeaderSave}
-                >
-                  <Save className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 px-2 bg-red-600 hover:bg-red-700 text-white"
-                  onClick={handleHeaderCancel}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="cursor-pointer hover:bg-blue-500 px-3 py-1 rounded transition-colors"
-                onClick={() => handleHeaderEdit('pdo')}
-                title="Click to edit PDO contract holder"
-              >
-                {pdoHolder}
-              </span>
-            )}
+                  {pdoHolder}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Table Header */}
-        <div className="sticky top-0 bg-slate-800 border-b border-slate-900 z-10">
-          <div className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 font-semibold text-sm text-white min-w-[1800px]">
-            <div className="text-center">#</div>
-            <div className="font-semibold">HSE Actions & Requirements</div>
-            {periods.map(period => (
-              <div key={period.period_id} className="text-center text-xs font-semibold">
-                {period.label}
+        <div className="sticky top-0 bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border-b-2 border-slate-700 z-50 shadow-2xl overflow-visible">
+          <div className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 font-bold text-sm text-white overflow-visible" style={{ minWidth: '1900px', width: '100%' }}>
+            <div className="text-center font-bold">#</div>
+            <div className="font-bold">HSE Actions & Requirements</div>
+            
+            {/* January */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Jan-25</span>
               </div>
-            ))}
+            </div>
+            
+            {/* February */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Feb-25</span>
+              </div>
+            </div>
+            
+            {/* March */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Mar-25</span>
+              </div>
+            </div>
+            
+            {/* April */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Apr-25</span>
+              </div>
+            </div>
+            
+            {/* May */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">May-25</span>
+              </div>
+            </div>
+            
+            {/* June */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Jun-25</span>
+              </div>
+            </div>
+            
+            {/* July */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Jul-25</span>
+              </div>
+            </div>
+            
+            {/* August */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Aug-25</span>
+              </div>
+            </div>
+            
+            {/* September */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Sep-25</span>
+              </div>
+            </div>
+            
+            {/* October */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Oct-25</span>
+              </div>
+            </div>
+            
+            {/* November */}
+            <div className="text-center font-bold whitespace-nowrap px-1">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span className="text-xs">Nov-25</span>
+              </div>
+            </div>
+            
+            {/* December - Specially treated */}
+            <div className="text-center font-bold whitespace-nowrap px-1 bg-slate-700 rounded shadow-lg border border-slate-600">
+              <div className="flex items-center justify-center space-x-1">
+                <Calendar className="h-3 w-3 flex-shrink-0 text-white" />
+                <span className="text-xs font-black text-white">Dec-25</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -500,118 +704,122 @@ export function KpiGrid() {
         {Array.from(sectionsMap.entries()).map(([sectionId, items]) => {
           const section = items[0].section;
           return (
-            <div key={sectionId} className="border-b">
+            <div key={sectionId} className="border-b shadow-sm">
               {/* Section Header */}
-              <div className="bg-slate-700 p-3 font-semibold text-white text-base border-b border-slate-600">
-                {section.order_idx}. {section.name}
+              <div className="bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 p-4 font-bold text-white text-lg border-b-2 border-slate-600 shadow-md">
+                <div className="flex items-center space-x-3">
+                  <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold">
+                    {section.order_idx}
+                  </span>
+                  <span>{section.name}</span>
+                </div>
               </div>
 
               {/* KPIs in section */}
               {items.map((item, index) => (
                 <div
                   key={item.kpi.kpi_id}
-                  className="grid grid-cols-[50px_400px_repeat(12,_100px)] gap-2 p-3 border-b border-slate-200 hover:bg-slate-50 text-sm bg-white min-w-[1800px]"
+                  className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 border-b border-slate-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 text-sm bg-white min-w-[1900px] transition-all duration-200"
                 >
-                  <div className="text-center font-semibold text-sm text-slate-700">
+                  <div className="text-center font-bold text-slate-700 bg-slate-100 rounded-lg p-2 flex items-center justify-center shadow-sm">
                     {section.order_idx}.{index + 1}
                   </div>
                   
                   <div className="pr-2">
-                    <div className="font-semibold text-slate-900 leading-tight text-sm">
+                    <div className="font-bold text-slate-900 leading-tight text-sm mb-2 p-3 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg shadow-sm border border-slate-200">
                       {item.kpi.name}
                     </div>
                     {item.kpi.description && (
-                      <div className="text-xs text-slate-700 mt-1">
-                        {item.kpi.description.substring(0, 100)}...
+                      <div className="text-xs text-slate-600 mt-1 p-2 bg-slate-50 rounded border-l-4 border-blue-300">
+                        {item.kpi.description.substring(0, 120)}...
                       </div>
                     )}
                   </div>
                   
-                  {/* Monthly values - modern design */}
+                  {/* Monthly values */}
                   {periods.map(period => {
                     const value = item.values[period.period_id];
+                    const cellId = `${item.kpi.kpi_id}-${period.period_id}`;
+                    const attachmentCount = value?.attachment_count || 0;
                     
                     return (
                       <div key={period.period_id} className="space-y-2">
-                        {/* Value input with color coding and animations */}
+                        {/* Value input */}
                         <div className="relative">
                           <input
                             type="text"
                             defaultValue={value?.text_value || value?.numeric_value?.toString() || ''}
-                            className={`w-full text-center text-base font-bold border-2 rounded px-2 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 ${
+                            className={`${getValueColorClass(value?.text_value || value?.numeric_value?.toString())} ${
                               isCellSaving(item.kpi.kpi_id, period.period_id) 
                                 ? 'opacity-70 cursor-wait' 
-                                : isCellUpdating(item.kpi.kpi_id, period.period_id)
-                                  ? 'ring-2 ring-green-400 border-green-400 bg-green-50' 
-                                  : getValueColorClass(value?.text_value || value?.numeric_value?.toString())
+                                : ''
                             }`}
                             placeholder="0"
                             disabled={isCellSaving(item.kpi.kpi_id, period.period_id)}
                             onBlur={(e) => {
                               const newValue = e.target.value;
-                              if (newValue !== (value?.text_value || value?.numeric_value?.toString() || '')) {
-                                handleQuickSave(item.kpi.kpi_id, period.period_id, newValue, value?.status || 'not_started');
+                              const currentValue = value?.text_value || value?.numeric_value?.toString() || '';
+                              if (newValue !== currentValue) {
+                                updateKpiValue(item.kpi.kpi_id, period.period_id, newValue);
                               }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                e.currentTarget.blur();
+                                const newValue = (e.target as HTMLInputElement).value;
+                                const currentValue = value?.text_value || value?.numeric_value?.toString() || '';
+                                if (newValue !== currentValue) {
+                                  updateKpiValue(item.kpi.kpi_id, period.period_id, newValue);
+                                }
+                                (e.target as HTMLInputElement).blur();
                               }
                             }}
                           />
-                          
-                          {/* Loading spinner overlay */}
                           {isCellSaving(item.kpi.kpi_id, period.period_id) && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded">
-                              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                            </div>
+                            <Loader2 className="h-4 w-4 animate-spin absolute right-2 top-1/2 transform -translate-y-1/2 text-blue-600" />
                           )}
                         </div>
-                        
-                        {/* Modern status dropdown with animations */}
-                        <div className="relative">
+
+                        {/* Status and actions */}
+                        <div className="flex items-center justify-between space-x-1">
                           <Select
                             value={value?.status || 'not_started'}
-                            disabled={isCellSaving(item.kpi.kpi_id, period.period_id)}
-                            onValueChange={(newStatus: KpiStatus) => {
-                              const currentValue = value?.text_value || value?.numeric_value?.toString() || '';
-                              handleQuickSave(item.kpi.kpi_id, period.period_id, currentValue, newStatus);
-                            }}
+                            onValueChange={(newStatus: KpiStatus) => updateKpiStatus(item.kpi.kpi_id, period.period_id, newStatus)}
                           >
-                            <SelectTrigger className={`w-full h-10 text-sm font-semibold border-2 bg-white text-slate-900 hover:bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all duration-300 ${
-                              isCellSaving(item.kpi.kpi_id, period.period_id) 
-                                ? 'opacity-70 cursor-wait border-slate-300' 
-                                : isCellUpdating(item.kpi.kpi_id, period.period_id)
-                                  ? 'border-green-400 ring-2 ring-green-400 bg-green-50'
-                                  : 'border-slate-400'
-                            }`}>
-                              <SelectValue />
+                            <SelectTrigger className="h-7 text-xs px-2 border-0 bg-transparent shadow-none">
+                              <div className="flex items-center space-x-1">
+                                {getStatusIcon(value?.status || 'not_started')}
+                                <SelectValue />
+                              </div>
                             </SelectTrigger>
-                            <SelectContent className="bg-white border-2 border-slate-300 shadow-lg min-w-32">
-                              <SelectItem value="not_started" className="text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer py-2">
-                                Not Started
-                              </SelectItem>
-                              <SelectItem value="in_progress" className="text-sm font-semibold text-amber-800 hover:bg-amber-50 cursor-pointer py-2">
-                                In Progress
-                              </SelectItem>
-                              <SelectItem value="done" className="text-sm font-semibold text-green-800 hover:bg-green-50 cursor-pointer py-2">
-                                Done
-                              </SelectItem>
-                              <SelectItem value="blocked" className="text-sm font-semibold text-red-800 hover:bg-red-50 cursor-pointer py-2">
-                                Blocked
-                              </SelectItem>
-                              <SelectItem value="needs_review" className="text-sm font-semibold text-blue-800 hover:bg-blue-50 cursor-pointer py-2">
-                                Needs Review
-                              </SelectItem>
+                            <SelectContent className="bg-white border-2 border-slate-300 shadow-2xl z-50 backdrop-blur-sm">
+                              <SelectItem value="not_started" className="bg-white hover:bg-slate-100 text-slate-900">Not Started</SelectItem>
+                              <SelectItem value="in_progress" className="bg-white hover:bg-amber-100 text-slate-900">In Progress</SelectItem>
+                              <SelectItem value="done" className="bg-white hover:bg-emerald-100 text-slate-900">Done</SelectItem>
+                              <SelectItem value="blocked" className="bg-white hover:bg-red-100 text-slate-900">Blocked</SelectItem>
+                              <SelectItem value="needs_review" className="bg-white hover:bg-blue-100 text-slate-900">Needs Review</SelectItem>
                             </SelectContent>
                           </Select>
-                          
-                          {/* Loading spinner overlay for select */}
-                          {isCellSaving(item.kpi.kpi_id, period.period_id) && (
-                            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                              <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
-                            </div>
+
+                          {/* Attachment indicator */}
+                          {attachmentCount > 0 && (
+                            <Badge variant="secondary" className="text-xs px-1 py-0">
+                              <Paperclip className="h-3 w-3 mr-1" />
+                              {attachmentCount}
+                            </Badge>
                           )}
+                        </div>
+
+                        {/* Upload button */}
+                        <div className="flex items-center justify-center mt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700 hover:text-blue-800"
+                            onClick={() => openAttachmentModal(item.kpi.kpi_id, period.period_id)}
+                          >
+                            <Upload className="h-3 w-3 mr-1" />
+                            Files
+                          </Button>
                         </div>
                       </div>
                     );
@@ -622,6 +830,202 @@ export function KpiGrid() {
           );
         })}
       </div>
+
+      {/* Attachment Modal */}
+      {attachmentModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-bold">Attachments</h3>
+                  <p className="text-sm text-blue-100 mt-1">
+                    {attachmentModal.kpiName} - {attachmentModal.periodName}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-white border-white hover:bg-white hover:text-blue-600"
+                  onClick={() => setAttachmentModal({ isOpen: false, kpiId: null, periodId: null, kpiName: '', periodName: '' })}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 max-h-96 overflow-y-auto">
+              {/* Upload Area */}
+              <div 
+                className={`border-2 border-dashed rounded-lg p-8 mb-6 bg-gradient-to-br transition-all duration-300 cursor-pointer ${
+                  dragOver 
+                    ? 'border-blue-500 from-blue-50 to-blue-100 bg-blue-50/50' 
+                    : 'border-slate-300 from-slate-50 to-white hover:border-blue-400 hover:from-blue-50 hover:to-blue-100'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  if (attachmentModal.kpiId && attachmentModal.periodId) {
+                    handleFileUpload(e.dataTransfer.files, attachmentModal.kpiId, attachmentModal.periodId);
+                  }
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="text-center">
+                  <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 transition-colors duration-300 ${
+                    dragOver ? 'bg-blue-200' : 'bg-blue-100'
+                  }`}>
+                    <Upload className={`h-6 w-6 transition-colors duration-300 ${
+                      dragOver ? 'text-blue-700' : 'text-blue-600'
+                    }`} />
+                  </div>
+                  <h4 className={`text-lg font-semibold mb-2 transition-colors duration-300 ${
+                    dragOver ? 'text-blue-900' : 'text-slate-900'
+                  }`}>
+                    {dragOver ? 'Drop files here' : 'Upload Files'}
+                  </h4>
+                  <p className={`text-sm mb-4 transition-colors duration-300 ${
+                    dragOver ? 'text-blue-700' : 'text-slate-600'
+                  }`}>
+                    {dragOver ? 'Release to upload' : 'Drag and drop files here, or click to select files'}
+                  </p>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (attachmentModal.kpiId && attachmentModal.periodId) {
+                        handleFileUpload(e.target.files, attachmentModal.kpiId, attachmentModal.periodId);
+                      }
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                      }
+                    }}
+                  />
+                  
+                  {!dragOver && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Choose Files
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Uploaded Files */}
+              {attachments.length > 0 ? (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-slate-900 flex items-center">
+                    <Paperclip className="h-4 w-4 mr-2" />
+                    Attached Files ({attachments.length})
+                  </h4>
+                  
+                  <div className="space-y-2">
+                    {attachments.map((attachment) => (
+                      <div
+                        key={attachment.attachment_id}
+                        className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border hover:bg-slate-100 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          {getFileIcon(attachment.file_type)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">
+                              {attachment.file_name}
+                            </p>
+                            <div className="flex items-center space-x-2 text-xs text-slate-500">
+                              <span>{formatFileSize(attachment.file_size)}</span>
+                              <span>•</span>
+                              <span>
+                                {new Date(attachment.uploaded_at).toLocaleDateString()}
+                              </span>
+                              {attachment.uploader && (
+                                <>
+                                  <span>•</span>
+                                  <span>{attachment.uploader.display_name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => downloadAttachment(attachment)}
+                            className="h-8 w-8 p-0"
+                            title="Download"
+                          >
+                            <Download className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteAttachment(attachment.attachment_id)}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 mb-4">
+                    <FileText className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <p className="text-sm text-slate-500">No files attached yet</p>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {uploadingFiles.size > 0 && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600 mr-2" />
+                    <span className="text-sm text-blue-800">
+                      Uploading {uploadingFiles.size} file{uploadingFiles.size === 1 ? '' : 's'}...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-200 p-4 bg-slate-50">
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setAttachmentModal({ isOpen: false, kpiId: null, periodId: null, kpiName: '', periodName: '' })}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

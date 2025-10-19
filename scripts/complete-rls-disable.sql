@@ -14,8 +14,8 @@ ALTER TABLE change_set DISABLE ROW LEVEL SECURITY;
 
 -- Make sure auth_user_id is properly set for all users
 UPDATE app_user 
-SET auth_user_id = user_id::text 
-WHERE auth_user_id IS NULL OR auth_user_id = '';
+SET auth_user_id = user_id 
+WHERE auth_user_id IS NULL;
 
 -- Make sure all users have the auth_user_id field properly mapped
 -- This will show any users that might have issues:
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
 );
 
 -- Create an updated_at trigger for user_settings if it doesn't exist
+DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings;
 CREATE TRIGGER update_user_settings_updated_at 
     BEFORE UPDATE ON user_settings 
     FOR EACH ROW 

@@ -64,12 +64,43 @@ export interface KpiValue {
   status: KpiStatus;
   evidence_url?: string;
   evidence_metadata?: Record<string, any>;
+  evidence_summary?: string;
+  attachment_count?: number;
   last_calculated_at?: string;
   created_at: string;
   updated_at: string;
   version: number;
   kpi?: Kpi;
   period?: KpiPeriod;
+  attachments?: KpiAttachment[];
+}
+
+export interface KpiAttachment {
+  attachment_id: string;
+  kpi_value_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  uploaded_by: string;
+  uploaded_at: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  uploader?: AppUser;
+}
+
+export interface KpiAttachmentSummary {
+  value_id: string;
+  kpi_id: string;
+  period_id: string;
+  total_attachments: number;
+  image_count: number;
+  pdf_count: number;
+  other_count: number;
+  file_names?: string;
+  latest_upload?: string;
 }
 
 export interface GridCell {
