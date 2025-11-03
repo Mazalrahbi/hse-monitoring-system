@@ -79,10 +79,10 @@ export function AppWrapper() {
   // Show loading screen while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading HSE Monitoring System...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto"></div>
+          <p className="mt-2 text-yellow-500">Loading HSE Monitoring System...</p>
         </div>
       </div>
     );
@@ -96,16 +96,16 @@ export function AppWrapper() {
   // Show main application
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-black">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-neutral-900 shadow-sm border-b-2 border-yellow-600">
         <div className="max-w-full mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-yellow-500">
                 HSE Monitoring System
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-yellow-400">
                 Real-time collaborative KPI tracking and management
               </p>
             </div>
@@ -157,13 +157,13 @@ export function AppWrapper() {
               </Button>
 
               {/* User Info */}
-              <div className="flex items-center space-x-3 border-l pl-4">
+              <div className="flex items-center space-x-3 border-l border-yellow-600 pl-4">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-yellow-400">
                     {appUser.display_name || appUser.email}
                   </p>
                   <div className="flex items-center justify-end space-x-2">
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-yellow-500">
                       {appUser.department || 'No Department'}
                     </p>
                     <div className="flex space-x-1">
@@ -200,16 +200,16 @@ export function AppWrapper() {
       {/* Main Content */}
       <main className="max-w-full mx-auto px-4 py-6">
         {currentView === 'grid' && (
-          <div className="bg-white rounded-lg shadow-md border-2">
-            <div className="p-4 border-b-2 bg-gray-100">
+          <div className="bg-black rounded-lg shadow-md border-2 border-yellow-600">
+            <div className="p-4 border-b-2 border-yellow-600 bg-neutral-900">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">HSE Monitoring Plan - 2025</h2>
+                <h2 className="text-xl font-bold text-yellow-500">HSE Monitoring Plan - 2025</h2>
                 <div className="flex items-center space-x-4">
-                  <Badge variant="default" className="bg-green-500">
-                    <div className="w-2 h-2 bg-white rounded-full mr-2"></div>
+                  <Badge variant="default" className="bg-emerald-600">
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></div>
                     Live
                   </Badge>
-                  <span className="text-sm font-bold text-gray-800">
+                  <span className="text-sm font-bold text-yellow-400">
                     Last updated: {mounted ? new Date().toLocaleString() : 'Loading...'}
                   </span>
                 </div>

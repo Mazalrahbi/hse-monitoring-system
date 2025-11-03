@@ -1,21 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #2563eb;
+  /* Black and Dark Yellow Theme */
+  --background: #0a0a0a;
+  --foreground: #FFD700;
+  --primary: #D4AF37;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #FFD700;
+  --accent: #CCA300;
+  --accent-foreground: #000000;
+  --destructive: #FF6B6B;
+  --destructive-foreground: #000000;
+  --muted: #2a2a2a;
+  --muted-foreground: #B8860B;
+  --border: #D4AF37;
+  --input: #1a1a1a;
+  --ring: #FFD700;
 }
 
 @theme inline {
@@ -38,12 +39,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Force light mode - remove automatic dark mode switching */
-/* This ensures consistent styling regardless of system preference */
-
 body {
-  background: #ffffff;
-  color: #171717;
+  background: #0a0a0a;
+  color: #FFD700;
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -52,27 +50,180 @@ body {
   color: inherit;
 }
 
-/* Override any potential white text on white background */
-.text-white {
-  color: #ffffff !important;
+/* Black text where needed */
+.text-black {
+  color: #000000 !important;
 }
 
-/* Ensure buttons have proper contrast */
-button {
-  color: inherit;
+/* Yellow text */
+.text-yellow {
+  color: #FFD700 !important;
 }
 
-/* Fix any potential input visibility issues */
+/* Gold text */
+.text-gold {
+  color: #D4AF37 !important;
+}
+
+/* Ensure inputs have proper styling */
 input, textarea, select {
-  color: #1f2937 !important;
-  background: #ffffff;
+  color: #FFD700 !important;
+  background: #1a1a1a;
+  border-color: #D4AF37;
 }
 
 input::placeholder, textarea::placeholder {
-  color: #6b7280 !important;
+  color: #B8860B !important;
 }
 
-/* Fix any modal or overlay text visibility */
+/* Fix modal backgrounds */
 [role="dialog"], [data-dialog-content] {
-  color: #1f2937;
+  background: #1a1a1a;
+  color: #FFD700;
+  border-color: #D4AF37;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4AF37;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FFD700;
+}
+
+/* Button hover states */
+button:hover {
+  opacity: 0.9;
+}
+
+/* Link colors */
+a {
+  color: #FFD700;
+}
+
+a:hover {
+  color: #D4AF37;
+}
+
+/* Selection colors */
+::selection {
+  background: #D4AF37;
+  color: #000000;
+}
+
+/* Force all white backgrounds to black/dark */
+.bg-white, [class*="bg-white"] {
+  background-color: #1a1a1a !important;
+  color: #FFD700 !important;
+}
+
+/* Force all light backgrounds to dark */
+.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-gray-100,
+.bg-blue-50, .bg-blue-100, .from-slate-50, .to-white {
+  background-color: #2a2a2a !important;
+  color: #FFD700 !important;
+}
+
+/* Force all light text to yellow */
+.text-slate-900, .text-gray-900, .text-slate-700, .text-gray-700,
+.text-slate-600, .text-gray-600, .text-slate-500, .text-gray-500 {
+  color: #FFD700 !important;
+}
+
+/* Force borders to yellow */
+.border-slate-300, .border-slate-200, .border-gray-300, .border-gray-200 {
+  border-color: #D4AF37 !important;
+}
+
+/* Dropdown and modal fixes */
+[role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {
+  background-color: #1a1a1a !important;
+  border-color: #D4AF37 !important;
+}
+
+/* Option items */
+[role="option"] {
+  background-color: #1a1a1a !important;
+  color: #FFD700 !important;
+}
+
+[role="option"]:hover {
+  background-color: #2a2a2a !important;
+}
+
+/* Remove the too-aggressive div override that breaks text visibility */
+
+/* Force specific elements */
+.border-slate-200, .border-slate-300, .border-gray-200, .border-gray-300 {
+  border-color: #D4AF37 !important;
+}
+
+.text-white:not(.force-white) {
+  color: #FFD700 !important;
+}
+
+/* Cards and containers */
+[class*="bg-white"], [class*="from-white"], [class*="to-white"] {
+  background: #1a1a1a !important;
+  color: #FFD700 !important;
+}
+
+[class*="bg-blue-"], [class*="from-blue-"], [class*="to-blue-"],
+[class*="bg-indigo-"], [class*="from-indigo-"], [class*="to-indigo-"] {
+  background: #2a2a2a !important;
+}
+
+/* All shades of grey/slate to dark */
+[class*="bg-slate"], [class*="bg-gray"] {
+  background: #2a2a2a !important;
+  color: #FFD700 !important;
+}
+
+/* Text colors */
+[class*="text-slate"], [class*="text-gray"] {
+  color: #FFD700 !important;
+}
+
+[class*="text-blue"], [class*="text-indigo"] {
+  color: #FFD700 !important;
+}
+
+/* Borders */
+[class*="border-slate"], [class*="border-gray"],
+[class*="border-blue"], [class*="border-indigo"] {
+  border-color: #D4AF37 !important;
+}
+
+/* Shadows */
+.shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl {
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.3) !important;
+}
+
+/* Specific overrides for common UI patterns */
+button, .button {
+  border-color: #D4AF37 !important;
+}
+
+/* Modal and dialog backgrounds */
+[class*="modal"], [class*="dialog"], [class*="popup"],
+[data-state="open"], [data-radix-dialog-content] {
+  background-color: #1a1a1a !important;
+  color: #FFD700 !important;
+  border-color: #D4AF37 !important;
+}
+
+/* Overlays */
+[class*="backdrop"], [class*="overlay"] {
+  background-color: rgba(0, 0, 0, 0.8) !important;
 }

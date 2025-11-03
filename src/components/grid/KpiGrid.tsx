@@ -56,6 +56,10 @@ export function KpiGrid() {
   const [editingHeader, setEditingHeader] = useState<'contractor' | 'pdo' | null>(null);
   const [headerEditValue, setHeaderEditValue] = useState('');
   
+  // Filter states
+  const [selectedSection, setSelectedSection] = useState<string>('all');
+  const [selectedKpi, setSelectedKpi] = useState<string>('all');
+  
   // Attachment states
   const [attachmentModal, setAttachmentModal] = useState<AttachmentModalState>({
     isOpen: false,
@@ -286,18 +290,18 @@ export function KpiGrid() {
     const baseClasses = "w-full text-center text-base font-bold px-3 py-2 focus:outline-none transition-all duration-300 border-2 rounded-lg";
     
     if (!value || value === '') {
-      return `${baseClasses} bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700 border-slate-300 focus:border-slate-500`;
+      return `${baseClasses} bg-neutral-800 text-yellow-400 border-yellow-600 focus:border-yellow-500 placeholder:text-yellow-700`;
     }
     
     const trimmedValue = value.trim();
     if (trimmedValue === '1' || trimmedValue.toLowerCase() === 'done') {
-      return `${baseClasses} bg-gradient-to-br from-emerald-50 to-green-100 text-emerald-800 border-emerald-400 focus:border-emerald-500`;
+      return `${baseClasses} bg-emerald-900 text-emerald-300 border-emerald-500 focus:border-emerald-400`;
     } else if (trimmedValue === '0' || trimmedValue.toLowerCase().includes('progress')) {
-      return `${baseClasses} bg-gradient-to-br from-amber-50 to-orange-100 text-amber-800 border-amber-400 focus:border-amber-500`;
+      return `${baseClasses} bg-amber-900 text-amber-300 border-amber-500 focus:border-amber-400`;
     } else if (/^\d+$/.test(trimmedValue) && parseInt(trimmedValue) > 1) {
-      return `${baseClasses} bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800 border-blue-400 focus:border-blue-500`;
+      return `${baseClasses} bg-neutral-700 text-yellow-300 border-yellow-500 focus:border-yellow-400`;
     } else {
-      return `${baseClasses} bg-gradient-to-br from-white to-slate-50 text-slate-700 border-slate-300 focus:border-slate-500`;
+      return `${baseClasses} bg-neutral-800 text-yellow-400 border-yellow-600 focus:border-yellow-500`;
     }
   };
 
@@ -499,10 +503,10 @@ export function KpiGrid() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex items-center justify-center h-64 bg-black">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <div className="text-lg font-semibold text-slate-800">Loading HSE Monitoring Plan...</div>
+          <Loader2 className="h-8 w-8 animate-spin text-yellow-500 mx-auto mb-4" />
+          <div className="text-lg font-semibold text-yellow-500">Loading HSE Monitoring Plan...</div>
         </div>
       </div>
     );
@@ -519,10 +523,10 @@ export function KpiGrid() {
   });
 
   return (
-    <div className="w-full overflow-x-auto overflow-y-visible bg-gradient-to-br from-slate-50 to-white">
-      <div className="min-w-[1900px]">
+    <div className="w-full h-full overflow-x-auto overflow-y-auto bg-black">
+      <div style={{ minWidth: '1900px', width: 'max-content' }}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 text-white p-6 shadow-xl">
+        <div className="bg-gradient-to-r from-black via-neutral-900 to-black border-b-4 border-yellow-600 p-6 shadow-xl">
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-3 tracking-wide">2025 HSE Monitoring Plan</h1>
             
@@ -596,9 +600,77 @@ export function KpiGrid() {
           </div>
         </div>
 
+        {/* Filter Section */}
+        <div className="bg-neutral-900 border-b-2 border-yellow-600 p-4 shadow-md">
+          <div className="flex items-center space-x-4 max-w-4xl">
+            <div className="flex items-center space-x-2 flex-1">
+              <label className="text-sm font-semibold text-yellow-500 whitespace-nowrap">
+                Filter by Section:
+              </label>
+              <Select value={selectedSection} onValueChange={setSelectedSection}>
+                <SelectTrigger className="w-64 bg-neutral-800 border-yellow-600 text-yellow-400">
+                  <SelectValue placeholder="All Sections" />
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-900 border-2 border-yellow-600 shadow-xl z-50">
+                  <SelectItem value="all" className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400">All Sections</SelectItem>
+                  {Array.from(sectionsMap.entries()).map(([sectionId, items]) => (
+                    <SelectItem 
+                      key={sectionId} 
+                      value={sectionId}
+                      className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400"
+                    >
+                      {items[0].section.order_idx}. {items[0].section.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2 flex-1">
+              <label className="text-sm font-semibold text-yellow-500 whitespace-nowrap">
+                Filter by KPI:
+              </label>
+              <Select value={selectedKpi} onValueChange={setSelectedKpi}>
+                <SelectTrigger className="w-full bg-neutral-800 border-yellow-600 text-yellow-400">
+                  <SelectValue placeholder="All KPIs" />
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-900 border-2 border-yellow-600 shadow-xl z-50 max-h-96">
+                  <SelectItem value="all" className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400">All KPIs</SelectItem>
+                  {gridData
+                    .filter(item => selectedSection === 'all' || item.section.section_id === selectedSection)
+                    .map(item => (
+                      <SelectItem 
+                        key={item.kpi.kpi_id} 
+                        value={item.kpi.kpi_id}
+                        className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400"
+                      >
+                        {item.kpi.code}: {item.kpi.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {(selectedSection !== 'all' || selectedKpi !== 'all') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedSection('all');
+                  setSelectedKpi('all');
+                }}
+                className="whitespace-nowrap"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear Filters
+              </Button>
+            )}
+          </div>
+        </div>
+
         {/* Table Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 border-b-2 border-slate-700 z-50 shadow-2xl overflow-visible">
-          <div className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 font-bold text-sm text-white overflow-visible" style={{ minWidth: '1900px', width: '100%' }}>
+        <div className="sticky top-0 bg-gradient-to-r from-black via-neutral-900 to-black border-b-2 border-yellow-600 z-50 shadow-2xl overflow-visible">
+          <div className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 font-bold text-sm text-yellow-500 overflow-visible" style={{ minWidth: '1900px', width: '100%' }}>
             <div className="text-center font-bold">#</div>
             <div className="font-bold">HSE Actions & Requirements</div>
             
@@ -701,14 +773,25 @@ export function KpiGrid() {
         </div>
 
         {/* Sections and KPIs */}
-        {Array.from(sectionsMap.entries()).map(([sectionId, items]) => {
+        {Array.from(sectionsMap.entries())
+          .filter(([sectionId]) => selectedSection === 'all' || sectionId === selectedSection)
+          .map(([sectionId, items]) => {
           const section = items[0].section;
+          
+          // Filter items by selected KPI if applicable
+          const filteredItems = selectedKpi === 'all' 
+            ? items 
+            : items.filter(item => item.kpi.kpi_id === selectedKpi);
+          
+          // Skip section if no items match the filter
+          if (filteredItems.length === 0) return null;
+          
           return (
             <div key={sectionId} className="border-b shadow-sm">
               {/* Section Header */}
-              <div className="bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 p-4 font-bold text-white text-lg border-b-2 border-slate-600 shadow-md">
+              <div className="bg-gradient-to-r from-black via-neutral-900 to-black p-4 font-bold text-yellow-500 text-lg border-b-2 border-yellow-600 shadow-md">
                 <div className="flex items-center space-x-3">
-                  <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold">
+                  <span className="bg-yellow-600 text-black px-3 py-1 rounded-full text-sm font-bold">
                     {section.order_idx}
                   </span>
                   <span>{section.name}</span>
@@ -716,21 +799,21 @@ export function KpiGrid() {
               </div>
 
               {/* KPIs in section */}
-              {items.map((item, index) => (
+              {filteredItems.map((item, index) => (
                 <div
                   key={item.kpi.kpi_id}
-                  className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 border-b border-slate-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 text-sm bg-white min-w-[1900px] transition-all duration-200"
+                  className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 border-b border-yellow-900/30 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-black text-sm bg-neutral-950 min-w-[1900px] transition-all duration-200"
                 >
-                  <div className="text-center font-bold text-slate-700 bg-slate-100 rounded-lg p-2 flex items-center justify-center shadow-sm">
+                  <div className="text-center font-bold text-black bg-yellow-500 rounded-lg p-2 flex items-center justify-center shadow-sm border-2 border-yellow-600">
                     {section.order_idx}.{index + 1}
                   </div>
                   
                   <div className="pr-2">
-                    <div className="font-bold text-slate-900 leading-tight text-sm mb-2 p-3 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg shadow-sm border border-slate-200">
+                    <div className="font-bold text-yellow-400 leading-tight text-sm mb-2 p-3 bg-gradient-to-br from-neutral-900 to-black rounded-lg shadow-sm border-2 border-yellow-600">
                       {item.kpi.name}
                     </div>
                     {item.kpi.description && (
-                      <div className="text-xs text-slate-600 mt-1 p-2 bg-slate-50 rounded border-l-4 border-blue-300">
+                      <div className="text-xs text-yellow-300 mt-1 p-2 bg-neutral-900 rounded border-l-4 border-yellow-500">
                         {item.kpi.description.substring(0, 120)}...
                       </div>
                     )}
@@ -834,9 +917,9 @@ export function KpiGrid() {
       {/* Attachment Modal */}
       {attachmentModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+          <div className="bg-neutral-900 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden border-2 border-yellow-600">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6">
+            <div className="bg-gradient-to-r from-black via-neutral-900 to-black text-yellow-500 p-6 border-b-2 border-yellow-600">
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="text-lg font-bold">Attachments</h3>
