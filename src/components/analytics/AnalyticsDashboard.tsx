@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseClient } from '@/lib/supabase/client';
-import { KpiStatus, SiteAnalytics } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Select } from '@/components/ui/select';
 import { 
   BarChart, 
   Bar, 
@@ -17,185 +17,251 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
-  Legend,
-  Area,
-  AreaChart
+  Legend
 } from 'recharts';
 import { 
   TrendingUp, 
   TrendingDown, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  XCircle,
   Target,
   Calendar,
-  Users
+  Filter,
+  Award,
+  AlertCircle
 } from 'lucide-react';
 
 interface AnalyticsData {
   totalKpis: number;
-  completedKpis: number;
-  inProgressKpis: number;
-  notStartedKpis: number;
-  blockedKpis: number;
-  completionRate: number;
+  completionPercentage: number;
+  inProgressPercentage: number;
+  notStartedPercentage: number;
+  blockedPercentage: number;
   sectionStats: Array<{
     sectionName: string;
+    completionPercentage: number;
     total: number;
     completed: number;
-    inProgress: number;
-    notStarted: number;
-    blocked: number;
-    completionRate: number;
+    trend: 'up' | 'down' | 'stable';
   }>;
-  monthlyProgress: Array<{
+  periodComparison: Array<{
     month: string;
-    completed: number;
-    inProgress: number;
-    notStarted: number;
-    blocked: number;
+    completionPercentage: number;
+  }>;
+  topPerformers: Array<{
+    section: string;
+    percentage: number;
+  }>;
+  needsAttention: Array<{
+    section: string;
+    percentage: number;
   }>;
 }
 
 const STATUS_COLORS = {
   done: '#10B981',
-  in_progress: '#F59E0B', 
-  not_started: '#6B7280',
+  in_progress: '#3B82F6', 
+  not_started: '#9CA3AF',
   blocked: '#EF4444',
-  needs_review: '#3B82F6'
 };
 
 export function AnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalKpis: 0,
-    completedKpis: 0,
-    inProgressKpis: 0,
-    notStartedKpis: 0,
-    blockedKpis: 0,
-    completionRate: 0,
+    completionPercentage: 0,
+    inProgressPercentage: 0,
+    notStartedPercentage: 0,
+    blockedPercentage: 0,
     sectionStats: [],
-    monthlyProgress: []
+    periodComparison: [],
+    topPerformers: [],
+    needsAttention: []
   });
   const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
+  const [periods, setPeriods] = useState<Array<{id: string, label: string}>>([]);
+  const [sections, setSections] = useState<Array<{id: string, name: string}>>([]);
+
+  const loadFilters = useCallback(async () => {
+    try {
+      // Load periods
+      const { data: periodsData } = await supabaseClient
+        .from('period')
+        .select('id, label')
+        .order('label');
+      
+      if (periodsData) {
+        setPeriods(periodsData);
+      }
+
+      // Load sections (only 1-9)
+      const { data: sectionsData } = await supabaseClient
+        .from('section')
+        .select('id, name, number')
+        .gte('number', 1)
+        .lte('number', 9)
+        .order('number');
+      
+      if (sectionsData) {
+        setSections(sectionsData);
+      }
+    } catch (error) {
+      console.error('Error loading filters:', error);
+    }
+  }, []);
 
   const loadAnalytics = useCallback(async () => {
     try {
-      // Fetch KPI values with related data
-      const { data: kpiValues, error } = await supabaseClient
+      setLoading(true);
+
+      // Build query with filters - only get KPIs from sections 1-9 with subsections 1-12
+      let query = supabaseClient
         .from('kpi_value')
         .select(`
           *,
           kpi:kpi_id (
-            *,
+            id,
+            kpi_number,
+            name,
             section:section_id (
-              *
+              id,
+              name,
+              number
             )
           ),
           period:period_id (
-            *
+            id,
+            label
           )
         `);
 
+      // Apply period filter if selected
+      if (selectedPeriod !== 'all') {
+        query = query.eq('period_id', selectedPeriod);
+      }
+
+      const { data: kpiValues, error } = await query;
+
       if (error) throw error;
 
-      const values = kpiValues || [];
-      
-      // Calculate overall statistics
-      const totalKpis = values.length;
-      const completedKpis = values.filter(v => v.status === 'done').length;
-      const inProgressKpis = values.filter(v => v.status === 'in_progress').length;
-      const notStartedKpis = values.filter(v => v.status === 'not_started').length;
-      const blockedKpis = values.filter(v => v.status === 'blocked').length;
-      const completionRate = totalKpis > 0 ? (completedKpis / totalKpis) * 100 : 0;
+      // Filter to only include KPIs from sections 1-9 and valid KPI numbers (1.1 to 9.12)
+      const values = (kpiValues || []).filter(v => {
+        const sectionNum = v.kpi?.section?.number;
+        const kpiNum = v.kpi?.kpi_number;
+        
+        // Check if section is 1-9 and KPI number is valid (x.1 to x.12)
+        if (sectionNum >= 1 && sectionNum <= 9 && kpiNum) {
+          const [section, subsection] = kpiNum.split('.').map(Number);
+          return section >= 1 && section <= 9 && subsection >= 1 && subsection <= 12;
+        }
+        return false;
+      });
+
+      // Apply section filter if selected
+      const filteredValues = selectedSection !== 'all' 
+        ? values.filter(v => v.kpi?.section?.id === selectedSection)
+        : values;
+
+      // Calculate overall statistics (percentage-based)
+      const totalKpis = filteredValues.length;
+      const completedKpis = filteredValues.filter(v => v.status === 'done').length;
+      const inProgressKpis = filteredValues.filter(v => v.status === 'in_progress').length;
+      const notStartedKpis = filteredValues.filter(v => v.status === 'not_started').length;
+      const blockedKpis = filteredValues.filter(v => v.status === 'blocked').length;
+
+      const completionPercentage = totalKpis > 0 ? (completedKpis / totalKpis) * 100 : 0;
+      const inProgressPercentage = totalKpis > 0 ? (inProgressKpis / totalKpis) * 100 : 0;
+      const notStartedPercentage = totalKpis > 0 ? (notStartedKpis / totalKpis) * 100 : 0;
+      const blockedPercentage = totalKpis > 0 ? (blockedKpis / totalKpis) * 100 : 0;
 
       // Calculate section statistics
       const sectionMap = new Map();
-      values.forEach(value => {
+      filteredValues.forEach(value => {
         const sectionName = value.kpi?.section?.name || 'Unknown';
+        const sectionNumber = value.kpi?.section?.number;
+        
         if (!sectionMap.has(sectionName)) {
           sectionMap.set(sectionName, {
             sectionName,
+            sectionNumber,
             total: 0,
             completed: 0,
-            inProgress: 0,
-            notStarted: 0,
-            blocked: 0,
-            completionRate: 0
+            completionPercentage: 0,
+            trend: 'stable' as const
           });
         }
         
         const section = sectionMap.get(sectionName);
         section.total++;
         
-        switch (value.status) {
-          case 'done':
-            section.completed++;
-            break;
-          case 'in_progress':
-            section.inProgress++;
-            break;
-          case 'not_started':
-            section.notStarted++;
-            break;
-          case 'blocked':
-            section.blocked++;
-            break;
+        if (value.status === 'done') {
+          section.completed++;
         }
         
-        section.completionRate = section.total > 0 ? (section.completed / section.total) * 100 : 0;
+        section.completionPercentage = section.total > 0 ? (section.completed / section.total) * 100 : 0;
       });
 
-      const sectionStats = Array.from(sectionMap.values());
+      const sectionStats = Array.from(sectionMap.values())
+        .sort((a, b) => (a.sectionNumber || 0) - (b.sectionNumber || 0));
 
-      // Calculate monthly progress
-      const monthlyMap = new Map();
-      values.forEach(value => {
+      // Calculate period comparison
+      const periodMap = new Map();
+      filteredValues.forEach(value => {
         const monthLabel = value.period?.label || 'Unknown';
-        if (!monthlyMap.has(monthLabel)) {
-          monthlyMap.set(monthLabel, {
+        if (!periodMap.has(monthLabel)) {
+          periodMap.set(monthLabel, {
             month: monthLabel,
+            total: 0,
             completed: 0,
-            inProgress: 0,
-            notStarted: 0,
-            blocked: 0
+            completionPercentage: 0
           });
         }
         
-        const month = monthlyMap.get(monthLabel);
-        switch (value.status) {
-          case 'done':
-            month.completed++;
-            break;
-          case 'in_progress':
-            month.inProgress++;
-            break;
-          case 'not_started':
-            month.notStarted++;
-            break;
-          case 'blocked':
-            month.blocked++;
-            break;
+        const period = periodMap.get(monthLabel);
+        period.total++;
+        
+        if (value.status === 'done') {
+          period.completed++;
         }
+        
+        period.completionPercentage = period.total > 0 ? (period.completed / period.total) * 100 : 0;
       });
 
-      const monthlyProgress = Array.from(monthlyMap.values()).sort((a, b) => {
+      const periodComparison = Array.from(periodMap.values()).sort((a, b) => {
         const monthOrder = ['Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25', 
                            'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25', 'Dec-25'];
         return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
       });
 
+      // Top performers (sections with >70% completion)
+      const topPerformers = sectionStats
+        .filter(s => s.completionPercentage >= 70)
+        .sort((a, b) => b.completionPercentage - a.completionPercentage)
+        .slice(0, 3)
+        .map(s => ({
+          section: s.sectionName,
+          percentage: s.completionPercentage
+        }));
+
+      // Needs attention (sections with <40% completion or any blocked items)
+      const needsAttention = sectionStats
+        .filter(s => s.completionPercentage < 40)
+        .sort((a, b) => a.completionPercentage - b.completionPercentage)
+        .slice(0, 3)
+        .map(s => ({
+          section: s.sectionName,
+          percentage: s.completionPercentage
+        }));
+
       setAnalytics({
         totalKpis,
-        completedKpis,
-        inProgressKpis,
-        notStartedKpis,
-        blockedKpis,
-        completionRate,
+        completionPercentage,
+        inProgressPercentage,
+        notStartedPercentage,
+        blockedPercentage,
         sectionStats,
-        monthlyProgress
+        periodComparison,
+        topPerformers,
+        needsAttention
       });
 
     } catch (error) {
@@ -203,7 +269,11 @@ export function AnalyticsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedPeriod, selectedSection]);
+
+  useEffect(() => {
+    loadFilters();
+  }, [loadFilters]);
 
   useEffect(() => {
     loadAnalytics();
@@ -218,91 +288,215 @@ export function AnalyticsDashboard() {
   }
 
   const pieData = [
-    { name: 'Completed', value: analytics.completedKpis, color: STATUS_COLORS.done },
-    { name: 'In Progress', value: analytics.inProgressKpis, color: STATUS_COLORS.in_progress },
-    { name: 'Not Started', value: analytics.notStartedKpis, color: STATUS_COLORS.not_started },
-    { name: 'Blocked', value: analytics.blockedKpis, color: STATUS_COLORS.blocked },
+    { name: 'Completed', value: analytics.completionPercentage, color: STATUS_COLORS.done },
+    { name: 'In Progress', value: analytics.inProgressPercentage, color: STATUS_COLORS.in_progress },
+    { name: 'Not Started', value: analytics.notStartedPercentage, color: STATUS_COLORS.not_started },
+    { name: 'Blocked', value: analytics.blockedPercentage, color: STATUS_COLORS.blocked },
   ].filter(item => item.value > 0);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">HSE Analytics Dashboard</h1>
-          <p className="text-lg text-gray-800 font-medium">Real-time insights into your HSE monitoring performance</p>
+          <h1 className="text-3xl font-bold text-gray-900">Executive Analytics Dashboard</h1>
+          <p className="text-gray-600 mt-1">HSE Performance Overview (Sections 1-9)</p>
         </div>
-        <Badge variant="outline" className="text-sm font-medium border-gray-800 text-gray-800">
-          Last updated: {new Date().toLocaleString()}
+        <Badge variant="outline" className="text-sm px-3 py-1 w-fit">
+          Last updated: {new Date().toLocaleTimeString()}
         </Badge>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="border-2 shadow-md">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-bold text-gray-900">Total KPIs</CardTitle>
-            <Target className="h-5 w-5 text-gray-800" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900">{analytics.totalKpis}</div>
-            <p className="text-sm font-medium text-gray-700">Across all sections</p>
+      {/* Filters */}
+      <Card className="border shadow-sm">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-700">Filters:</span>
+            </div>
+            
+            <div className="flex gap-3">
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Periods</option>
+                {periods.map(period => (
+                  <option key={period.id} value={period.id}>
+                    {period.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Sections</option>
+                {sections.map(section => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </select>
+
+              {(selectedPeriod !== 'all' || selectedSection !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSelectedPeriod('all');
+                    setSelectedSection('all');
+                  }}
+                  className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border shadow-sm bg-white">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Overall Completion</p>
+                <p className="text-4xl font-bold text-green-600 mt-2">
+                  {analytics.completionPercentage.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">{analytics.totalKpis} Total KPIs</p>
+              </div>
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Target className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 shadow-md bg-green-50 border-green-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-bold text-gray-900">Completed</CardTitle>
-            <CheckCircle className="h-5 w-5 text-green-700" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-700">{analytics.completedKpis}</div>
-            <p className="text-sm font-bold text-green-800">
-              {analytics.completionRate.toFixed(1)}% completion rate
-            </p>
+        <Card className="border shadow-sm bg-white">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">In Progress</p>
+                <p className="text-4xl font-bold text-blue-600 mt-2">
+                  {analytics.inProgressPercentage.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Active tracking</p>
+              </div>
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 shadow-md bg-yellow-50 border-yellow-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-bold text-gray-900">In Progress</CardTitle>
-            <Clock className="h-5 w-5 text-yellow-700" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-700">{analytics.inProgressKpis}</div>
-            <p className="text-sm font-bold text-yellow-800">Active tracking</p>
+        <Card className="border shadow-sm bg-white">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Not Started</p>
+                <p className="text-4xl font-bold text-gray-600 mt-2">
+                  {analytics.notStartedPercentage.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Pending</p>
+              </div>
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <Calendar className="h-6 w-6 text-gray-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 shadow-md bg-gray-50 border-gray-300">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-bold text-gray-900">Not Started</CardTitle>
-            <Calendar className="h-5 w-5 text-gray-800" />
+        <Card className="border shadow-sm bg-white">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Blocked</p>
+                <p className="text-4xl font-bold text-red-600 mt-2">
+                  {analytics.blockedPercentage.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Needs attention</p>
+              </div>
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Insights Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Performers */}
+        <Card className="border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Award className="h-5 w-5 text-green-600" />
+              Top Performing Sections
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-gray-800">{analytics.notStartedKpis}</div>
-            <p className="text-sm font-bold text-gray-700">Pending initiation</p>
+            <div className="space-y-4">
+              {analytics.topPerformers.length > 0 ? (
+                analytics.topPerformers.map((performer, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                    <span className="font-medium text-gray-900">{performer.section}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-bold text-green-600">
+                        {performer.percentage.toFixed(1)}%
+                      </span>
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-4">No sections with &gt;70% completion yet</p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 shadow-md bg-red-50 border-red-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-bold text-gray-900">Blocked</CardTitle>
-            <AlertTriangle className="h-5 w-5 text-red-700" />
+        {/* Needs Attention */}
+        <Card className="border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Requires Attention
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-700">{analytics.blockedKpis}</div>
-            <p className="text-sm font-bold text-red-800">Requires attention</p>
+            <div className="space-y-4">
+              {analytics.needsAttention.length > 0 ? (
+                analytics.needsAttention.map((section, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
+                    <span className="font-medium text-gray-900">{section.section}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-bold text-red-600">
+                        {section.percentage.toFixed(1)}%
+                      </span>
+                      <TrendingDown className="h-5 w-5 text-red-600" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-4">All sections performing well</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pie Chart */}
-        <Card className="border-2 shadow-md">
+        {/* Status Distribution */}
+        <Card className="border shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-bold text-gray-900">KPI Status Distribution</CardTitle>
+            <CardTitle className="text-lg">Status Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -311,101 +505,82 @@ export function AnalyticsDashboard() {
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
+                  innerRadius={70}
+                  outerRadius={110}
                   paddingAngle={2}
                   dataKey="value"
+                  label={(entry) => `${(entry.value || 0).toFixed(1)}%`}
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Monthly Progress */}
-        <Card className="border-2 shadow-md">
+        {/* Period Trend */}
+        <Card className="border shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-bold text-gray-900">Monthly Progress Overview</CardTitle>
+            <CardTitle className="text-lg">Completion Trend by Period</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={analytics.monthlyProgress}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 'bold' }} />
-                <YAxis tick={{ fontSize: 12, fontWeight: 'bold' }} />
-                <Tooltip />
-                <Legend />
-                <Area 
-                  type="monotone" 
-                  dataKey="completed" 
-                  stackId="1"
-                  stroke={STATUS_COLORS.done} 
+              <BarChart data={analytics.periodComparison}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis 
+                  dataKey="month" 
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  stroke="#9ca3af"
+                />
+                <YAxis 
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  stroke="#9ca3af"
+                  label={{ value: 'Completion %', angle: -90, position: 'insideLeft', style: { fill: '#6b7280' } }}
+                />
+                <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                <Bar 
+                  dataKey="completionPercentage" 
                   fill={STATUS_COLORS.done}
-                  name="Completed"
+                  radius={[8, 8, 0, 0]}
+                  name="Completion %"
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="inProgress" 
-                  stackId="1"
-                  stroke={STATUS_COLORS.in_progress} 
-                  fill={STATUS_COLORS.in_progress}
-                  name="In Progress"
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="notStarted" 
-                  stackId="1"
-                  stroke={STATUS_COLORS.not_started} 
-                  fill={STATUS_COLORS.not_started}
-                  name="Not Started"
-                />
-              </AreaChart>
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
       {/* Section Performance */}
-      <Card className="border-2 shadow-md">
+      <Card className="border shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg font-bold text-gray-900">Section Performance Overview</CardTitle>
+          <CardTitle className="text-lg">Section Performance Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
+          <div className="space-y-4">
             {analytics.sectionStats.map((section, index) => (
-              <div key={index} className="space-y-3 p-4 bg-gray-50 rounded-lg border">
+              <div key={index} className="space-y-2 p-4 bg-white rounded-lg border hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-gray-900 text-base">{section.sectionName}</h4>
-                  <span className="text-sm font-bold text-gray-800 bg-white px-2 py-1 rounded">
-                    {section.completed}/{section.total} completed ({section.completionRate.toFixed(1)}%)
-                  </span>
-                </div>
-                <Progress value={section.completionRate} className="h-3" />
-                <div className="flex gap-6 text-sm font-medium text-gray-800">
-                  <span className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-600"></div>
-                    Done: {section.completed}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
-                    In Progress: {section.inProgress}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-gray-600"></div>
-                    Not Started: {section.notStarted}
-                  </span>
-                  {section.blocked > 0 && (
-                    <span className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                      Blocked: {section.blocked}
+                  <h4 className="font-semibold text-gray-900">{section.sectionName}</h4>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-600">
+                      {section.completed} of {section.total} KPIs
                     </span>
-                  )}
+                    <span className="text-xl font-bold text-gray-900">
+                      {section.completionPercentage.toFixed(1)}%
+                    </span>
+                  </div>
                 </div>
+                <Progress 
+                  value={section.completionPercentage} 
+                  className="h-2"
+                  style={{
+                    backgroundColor: '#e5e7eb'
+                  }}
+                />
               </div>
             ))}
           </div>
