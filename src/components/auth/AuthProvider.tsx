@@ -24,6 +24,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     let timeoutId: NodeJS.Timeout;
+    let keepAliveInterval: NodeJS.Timeout;
+    
+    // Keep-alive: Refresh session every 45 minutes to prevent timeout
+    const startKeepAlive = () => {
+      keepAliveInterval = setInterval(async () => {
+        try {
+          const { data: { session }, error } = await supabaseClient.auth.getSession();
+          if (session && !error) {
+            // Proactively refresh the session
+            await supabaseClient.auth.refreshSession();
+            console.log('Session refreshed via keep-alive');
+          }
+        } catch (error) {
+          console.error('Keep-alive refresh failed:', error);
+        }
+      }, 45 * 60 * 1000); // 45 minutes
+    };
     
     const initializeAuth = async () => {
       try {
@@ -64,6 +81,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           setLoading(false);
           clearTimeout(timeoutId);
+          
+          // Start keep-alive if user is logged in
+          if (session?.user) {
+            startKeepAlive();
+          }
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -105,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
       if (timeoutId) clearTimeout(timeoutId);
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
       subscription.unsubscribe();
     };
   }, []);

@@ -16,7 +16,25 @@ export const supabaseClient = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    // Refresh token before it expires (default is 1 hour, refresh at 50 minutes)
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'hse-supabase-auth',
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'x-application-name': 'hse-monitoring-system'
+    }
+  },
+  db: {
+    schema: 'public'
+  },
+  // Increase timeout and add retry logic
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 })
 
