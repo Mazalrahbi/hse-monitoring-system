@@ -143,15 +143,24 @@ export function AnalyticsDashboard() {
 
       if (error) throw error;
 
-      // Filter to only include KPIs from sections 1-9 and valid KPI numbers (1.1 to 9.12)
+      // Filter to only include KPIs from sections 1-9
       const values = (kpiValues || []).filter(v => {
         const sectionNum = v.kpi?.section?.number;
         const kpiNum = v.kpi?.kpi_number;
         
-        // Check if section is 1-9 and KPI number is valid (x.1 to x.12)
-        if (sectionNum >= 1 && sectionNum <= 9 && kpiNum) {
-          const [section, subsection] = kpiNum.split('.').map(Number);
-          return section >= 1 && section <= 9 && subsection >= 1 && subsection <= 12;
+        // Check if section number exists and is between 1-9
+        if (sectionNum !== undefined && sectionNum !== null && sectionNum >= 1 && sectionNum <= 9) {
+          // If KPI number exists, validate it
+          if (kpiNum) {
+            const parts = kpiNum.split('.');
+            if (parts.length === 2) {
+              const [section, subsection] = parts.map(Number);
+              // Allow any valid decimal structure for sections 1-9
+              return !isNaN(section) && !isNaN(subsection) && section >= 1 && section <= 9;
+            }
+          }
+          // If no KPI number, still include if section is valid
+          return true;
         }
         return false;
       });
