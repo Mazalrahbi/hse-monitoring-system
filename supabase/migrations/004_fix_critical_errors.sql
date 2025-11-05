@@ -209,7 +209,6 @@ COMMENT ON TABLE section IS 'HSE monitoring sections grouping related KPIs';
 COMMENT ON COLUMN section.order_idx IS 'Display order for sections';
 
 COMMENT ON TABLE change_set IS 'Audit trail of all data changes';
-COMMENT ON COLUMN change_set.version IS 'Currently unused - reserved for future use';
 
 -- =====================================================
 -- 8. CREATE MATERIALIZED VIEW FOR ANALYTICS
