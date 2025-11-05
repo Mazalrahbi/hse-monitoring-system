@@ -83,26 +83,26 @@ export function AnalyticsDashboard() {
 
   const loadFilters = useCallback(async () => {
     try {
-      // Load periods
+      // Load periods for 2025
       const { data: periodsData } = await supabaseClient
-        .from('period')
-        .select('id, label')
-        .order('label');
+        .from('kpi_period')
+        .select('period_id, label')
+        .eq('year', 2025)
+        .eq('period_type', 'monthly')
+        .order('month');
       
       if (periodsData) {
-        setPeriods(periodsData);
+        setPeriods(periodsData.map(p => ({ id: p.period_id, label: p.label })));
       }
 
-      // Load sections (only 1-9)
+      // Load sections
       const { data: sectionsData } = await supabaseClient
         .from('section')
-        .select('id, name, number')
-        .gte('number', 1)
-        .lte('number', 9)
-        .order('number');
+        .select('section_id, name, order_idx')
+        .order('order_idx');
       
       if (sectionsData) {
-        setSections(sectionsData);
+        setSections(sectionsData.map(s => ({ id: s.section_id, name: s.name })));
       }
     } catch (error) {
       console.error('Error loading filters:', error);
@@ -113,132 +113,179 @@ export function AnalyticsDashboard() {
     try {
       setLoading(true);
 
-      // Build query with filters - only get KPIs from sections 1-9 with subsections 1-12
-      let query = supabaseClient
-        .from('kpi_value')
-        .select(`
-          *,
-          kpi:kpi_id (
-            id,
-            kpi_number,
-            name,
-            section:section_id (
-              id,
-              name,
-              number
-            )
-          ),
-          period:period_id (
-            id,
-            label
-          )
-        `);
+      // Fetch data using the EXACT same structure as KPI Grid
+      // Fetch periods for 2025
+      const { data: periodsData, error: periodsError } = await supabaseClient
+        .from('kpi_period')
+        .select('*')
+        .eq('year', 2025)
+        .eq('period_type', 'monthly')
+        .order('month');
 
-      // Apply period filter if selected
-      if (selectedPeriod !== 'all') {
-        query = query.eq('period_id', selectedPeriod);
+      if (periodsError) throw periodsError;
+
+      // Fetch sections
+      const { data: sectionsData, error: sectionsError } = await supabaseClient
+        .from('section')
+        .select('*')
+        .order('order_idx');
+        
+      if (sectionsError) throw sectionsError;
+
+      // Fetch KPIs
+      const { data: kpisData, error: kpisError } = await supabaseClient
+        .from('kpi')
+        .select('*')
+        .eq('is_active', true)
+        .order('code');
+
+      if (kpisError) throw kpisError;
+
+      // Fetch KPI values
+      const { data: valuesData, error: valuesError } = await supabaseClient
+        .from('kpi_value')
+        .select('*');
+
+      if (valuesError) throw valuesError;
+
+      // Apply filters
+      let filteredKpis = kpisData || [];
+      if (selectedSection !== 'all') {
+        filteredKpis = filteredKpis.filter(kpi => kpi.section_id === selectedSection);
       }
 
-      const { data: kpiValues, error } = await query;
-
-      if (error) throw error;
-
-      // Filter to only include KPIs from sections 1-9
-      const values = (kpiValues || []).filter(v => {
-        const sectionNum = v.kpi?.section?.number;
-        const kpiNum = v.kpi?.kpi_number;
-        
-        // Check if section number exists and is between 1-9
-        if (sectionNum !== undefined && sectionNum !== null && sectionNum >= 1 && sectionNum <= 9) {
-          // If KPI number exists, validate it
-          if (kpiNum) {
-            const parts = kpiNum.split('.');
-            if (parts.length === 2) {
-              const [section, subsection] = parts.map(Number);
-              // Allow any valid decimal structure for sections 1-9
-              return !isNaN(section) && !isNaN(subsection) && section >= 1 && section <= 9;
-            }
-          }
-          // If no KPI number, still include if section is valid
-          return true;
+      // Organize values by KPI
+      const kpiValuesMap = new Map();
+      (valuesData || []).forEach(value => {
+        if (!kpiValuesMap.has(value.kpi_id)) {
+          kpiValuesMap.set(value.kpi_id, {});
         }
-        return false;
+        kpiValuesMap.get(value.kpi_id)[value.period_id] = value;
       });
 
-      // Apply section filter if selected
-      const filteredValues = selectedSection !== 'all' 
-        ? values.filter(v => v.kpi?.section?.id === selectedSection)
-        : values;
+      // Calculate statistics based on percentage of months completed for each KPI
+      const totalKpis = filteredKpis.length;
+      const totalPeriods = periodsData?.length || 12;
+      
+      // Calculate completion as percentage of months done for each KPI
+      let totalCompletionPercentage = 0;
+      let totalInProgressPercentage = 0;
+      let totalNotStartedPercentage = 0;
+      let totalBlockedPercentage = 0;
 
-      // Calculate overall statistics (percentage-based)
-      const totalKpis = filteredValues.length;
-      const completedKpis = filteredValues.filter(v => v.status === 'done').length;
-      const inProgressKpis = filteredValues.filter(v => v.status === 'in_progress').length;
-      const notStartedKpis = filteredValues.filter(v => v.status === 'not_started').length;
-      const blockedKpis = filteredValues.filter(v => v.status === 'blocked').length;
-
-      const completionPercentage = totalKpis > 0 ? (completedKpis / totalKpis) * 100 : 0;
-      const inProgressPercentage = totalKpis > 0 ? (inProgressKpis / totalKpis) * 100 : 0;
-      const notStartedPercentage = totalKpis > 0 ? (notStartedKpis / totalKpis) * 100 : 0;
-      const blockedPercentage = totalKpis > 0 ? (blockedKpis / totalKpis) * 100 : 0;
-
-      // Calculate section statistics
-      const sectionMap = new Map();
-      filteredValues.forEach(value => {
-        const sectionName = value.kpi?.section?.name || 'Unknown';
-        const sectionNumber = value.kpi?.section?.number;
+      filteredKpis.forEach(kpi => {
+        const values = kpiValuesMap.get(kpi.kpi_id) || {};
         
-        if (!sectionMap.has(sectionName)) {
-          sectionMap.set(sectionName, {
-            sectionName,
-            sectionNumber,
-            total: 0,
-            completed: 0,
-            completionPercentage: 0,
-            trend: 'stable' as const
+        if (selectedPeriod !== 'all') {
+          // For specific period, simple status check
+          const value = values[selectedPeriod] as any;
+          const status = value?.status || 'not_started';
+          
+          if (status === 'done') totalCompletionPercentage += 100;
+          else if (status === 'in_progress') totalInProgressPercentage += 100;
+          else if (status === 'blocked') totalBlockedPercentage += 100;
+          else totalNotStartedPercentage += 100;
+        } else {
+          // For all periods, calculate percentage of months with each status
+          let doneCount = 0;
+          let inProgressCount = 0;
+          let blockedCount = 0;
+          let notStartedCount = 0;
+          
+          (periodsData || []).forEach(period => {
+            const value = values[period.period_id] as any;
+            const status = value?.status || 'not_started';
+            
+            if (status === 'done') doneCount++;
+            else if (status === 'in_progress') inProgressCount++;
+            else if (status === 'blocked') blockedCount++;
+            else notStartedCount++;
+          });
+          
+          // Add percentage for this KPI
+          totalCompletionPercentage += (doneCount / totalPeriods) * 100;
+          totalInProgressPercentage += (inProgressCount / totalPeriods) * 100;
+          totalBlockedPercentage += (blockedCount / totalPeriods) * 100;
+          totalNotStartedPercentage += (notStartedCount / totalPeriods) * 100;
+        }
+      });
+
+      // Calculate average percentages across all KPIs
+      const completionPercentage = totalKpis > 0 ? totalCompletionPercentage / totalKpis : 0;
+      const inProgressPercentage = totalKpis > 0 ? totalInProgressPercentage / totalKpis : 0;
+      const notStartedPercentage = totalKpis > 0 ? totalNotStartedPercentage / totalKpis : 0;
+      const blockedPercentage = totalKpis > 0 ? totalBlockedPercentage / totalKpis : 0;
+
+      // Calculate section statistics using percentage of months completed
+      const sectionStatsMap = new Map();
+      
+      filteredKpis.forEach(kpi => {
+        const section = sectionsData?.find(s => s.section_id === kpi.section_id);
+        if (!section) return;
+
+        const sectionKey = section.section_id;
+        if (!sectionStatsMap.has(sectionKey)) {
+          sectionStatsMap.set(sectionKey, {
+            sectionName: section.name,
+            sectionNumber: section.order_idx,
+            totalKpis: 0,
+            totalCompletionPercentage: 0
           });
         }
+
+        const sectionStats = sectionStatsMap.get(sectionKey);
+        sectionStats.totalKpis++;
+
+        // Calculate percentage of months completed for this KPI
+        const values = kpiValuesMap.get(kpi.kpi_id) || {};
         
-        const section = sectionMap.get(sectionName);
-        section.total++;
-        
-        if (value.status === 'done') {
-          section.completed++;
+        if (selectedPeriod !== 'all') {
+          // For specific period, add 100% if done, 0% otherwise
+          const value = values[selectedPeriod] as any;
+          if (value?.status === 'done') {
+            sectionStats.totalCompletionPercentage += 100;
+          }
+        } else {
+          // For all periods, calculate percentage of months done
+          let doneCount = 0;
+          (periodsData || []).forEach(period => {
+            const value = values[period.period_id] as any;
+            if (value?.status === 'done') {
+              doneCount++;
+            }
+          });
+          sectionStats.totalCompletionPercentage += (doneCount / totalPeriods) * 100;
         }
-        
-        section.completionPercentage = section.total > 0 ? (section.completed / section.total) * 100 : 0;
       });
 
-      const sectionStats = Array.from(sectionMap.values())
-        .sort((a, b) => (a.sectionNumber || 0) - (b.sectionNumber || 0));
+      const sectionStats = Array.from(sectionStatsMap.values())
+        .map(s => ({
+          sectionName: s.sectionName,
+          sectionNumber: s.sectionNumber,
+          total: s.totalKpis,
+          completed: Math.round(s.totalKpis * (s.totalCompletionPercentage / s.totalKpis) / 100), // For display
+          completionPercentage: s.totalKpis > 0 ? s.totalCompletionPercentage / s.totalKpis : 0,
+          trend: 'stable' as const
+        }))
+        .sort((a, b) => a.sectionNumber - b.sectionNumber);
 
       // Calculate period comparison
-      const periodMap = new Map();
-      filteredValues.forEach(value => {
-        const monthLabel = value.period?.label || 'Unknown';
-        if (!periodMap.has(monthLabel)) {
-          periodMap.set(monthLabel, {
-            month: monthLabel,
-            total: 0,
-            completed: 0,
-            completionPercentage: 0
-          });
-        }
-        
-        const period = periodMap.get(monthLabel);
-        period.total++;
-        
-        if (value.status === 'done') {
-          period.completed++;
-        }
-        
-        period.completionPercentage = period.total > 0 ? (period.completed / period.total) * 100 : 0;
-      });
+      const periodComparison = (periodsData || []).map(period => {
+        let completed = 0;
+        filteredKpis.forEach(kpi => {
+          const values = kpiValuesMap.get(kpi.kpi_id) || {};
+          const value = values[period.period_id] as any;
+          if (value?.status === 'done') {
+            completed++;
+          }
+        });
 
-      const periodComparison = Array.from(periodMap.values()).sort((a, b) => {
-        const monthOrder = ['Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25', 
-                           'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25', 'Dec-25'];
-        return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+        return {
+          month: period.label,
+          total: filteredKpis.length,
+          completed,
+          completionPercentage: filteredKpis.length > 0 ? (completed / filteredKpis.length) * 100 : 0
+        };
       });
 
       // Top performers (sections with >70% completion)
@@ -251,7 +298,7 @@ export function AnalyticsDashboard() {
           percentage: s.completionPercentage
         }));
 
-      // Needs attention (sections with <40% completion or any blocked items)
+      // Needs attention (sections with <40% completion)
       const needsAttention = sectionStats
         .filter(s => s.completionPercentage < 40)
         .sort((a, b) => a.completionPercentage - b.completionPercentage)
@@ -309,7 +356,7 @@ export function AnalyticsDashboard() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Executive Analytics Dashboard</h1>
-          <p className="text-gray-600 mt-1">HSE Performance Overview (Sections 1-9)</p>
+          <p className="text-gray-600 mt-1">HSE Performance Overview (KPIs 1.1 - 9.12)</p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1 w-fit">
           Last updated: {new Date().toLocaleTimeString()}
@@ -378,7 +425,7 @@ export function AnalyticsDashboard() {
                 <p className="text-4xl font-bold text-green-600 mt-2">
                   {analytics.completionPercentage.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 mt-1">{analytics.totalKpis} Total KPIs</p>
+                <p className="text-xs text-gray-500 mt-1">{analytics.totalKpis} KPIs tracked</p>
               </div>
               <div className="p-2 bg-green-100 rounded-lg">
                 <Target className="h-6 w-6 text-green-600" />
@@ -518,13 +565,18 @@ export function AnalyticsDashboard() {
                   outerRadius={110}
                   paddingAngle={2}
                   dataKey="value"
-                  label={(entry) => `${(entry.value || 0).toFixed(1)}%`}
+                  label={(entry: any) => `${(entry.value || 0).toFixed(1)}%`}
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                <Tooltip 
+                  formatter={(value: any) => {
+                    const numValue = typeof value === 'number' ? value : 0;
+                    return `${numValue.toFixed(1)}%`;
+                  }} 
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -550,7 +602,12 @@ export function AnalyticsDashboard() {
                   stroke="#9ca3af"
                   label={{ value: 'Completion %', angle: -90, position: 'insideLeft', style: { fill: '#6b7280' } }}
                 />
-                <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                <Tooltip 
+                  formatter={(value: any) => {
+                    const numValue = typeof value === 'number' ? value : 0;
+                    return `${numValue.toFixed(1)}%`;
+                  }} 
+                />
                 <Bar 
                   dataKey="completionPercentage" 
                   fill={STATUS_COLORS.done}

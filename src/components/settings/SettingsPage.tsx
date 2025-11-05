@@ -54,10 +54,36 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (appUser) {
-      loadUserProfile();
-      loadUserSettings();
-    }
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const loadData = async () => {
+      // Set a safety timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        if (mounted) {
+          console.warn('Settings loading timeout - forcing loading to false');
+          setLoading(false);
+        }
+      }, 8000); // 8 second timeout
+
+      if (appUser) {
+        await Promise.all([
+          loadUserProfile(),
+          loadUserSettings()
+        ]);
+      } else {
+        setLoading(false);
+      }
+
+      clearTimeout(timeoutId);
+    };
+
+    loadData();
+
+    return () => {
+      mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [appUser]);
 
   const loadUserProfile = async () => {
@@ -66,7 +92,8 @@ export function SettingsPage() {
     try {
       console.log('Loading profile for user_id:', appUser.user_id);
       
-      const { data, error } = await supabase
+      // Add timeout to this specific request
+      const profilePromise = supabase
         .from('app_user')
         .select(`
           user_id,
@@ -78,10 +105,16 @@ export function SettingsPage() {
         .eq('user_id', appUser.user_id)
         .single();
 
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile load timeout')), 5000)
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
       if (error) throw error;
 
-      // Get user role separately
-      const { data: roleData } = await supabase
+      // Get user role separately with timeout
+      const rolePromise = supabase
         .from('user_role')
         .select(`
           role (
@@ -92,13 +125,19 @@ export function SettingsPage() {
         .limit(1)
         .single();
 
+      const roleTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Role load timeout')), 5000)
+      );
+
+      const roleResult = await Promise.race([rolePromise, roleTimeoutPromise]).catch(() => ({ data: null })) as any;
+
       const profile: UserProfile = {
         id: data.user_id,
         email: data.email,
         display_name: data.display_name,
         department: data.department,
         created_at: data.created_at,
-        role: (roleData as any)?.role?.name || 'Viewer'
+        role: roleResult.data?.role?.name || 'Viewer'
       };
 
       setUserProfile(profile);
@@ -106,30 +145,42 @@ export function SettingsPage() {
       setDepartment(profile.department || '');
     } catch (error) {
       console.error('Error loading user profile:', error);
+      // Set loading to false even on error
+      setLoading(false);
     }
   };
 
   const loadUserSettings = async () => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     
     try {
       console.log('Loading settings for user_id:', appUser.user_id);
       
-      const { data, error } = await supabase
+      // Add timeout to this specific request
+      const settingsPromise = supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', appUser.user_id)
         .single();
 
-      if (data) {
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Settings load timeout')), 5000)
+      );
+
+      const result = await Promise.race([settingsPromise, timeoutPromise]).catch(() => ({ data: null })) as any;
+
+      if (result.data) {
         setUserSettings({
-          notifications_enabled: data.notifications_enabled ?? true,
-          email_notifications: data.email_notifications ?? true,
-          real_time_updates: data.real_time_updates ?? true,
-          export_format: data.export_format || 'xlsx',
-          theme: data.theme || 'light',
-          language: data.language || 'en',
-          auto_save_interval: data.auto_save_interval || 30
+          notifications_enabled: result.data.notifications_enabled ?? true,
+          email_notifications: result.data.email_notifications ?? true,
+          real_time_updates: result.data.real_time_updates ?? true,
+          export_format: result.data.export_format || 'xlsx',
+          theme: result.data.theme || 'light',
+          language: result.data.language || 'en',
+          auto_save_interval: result.data.auto_save_interval || 30
         });
       }
     } catch (error) {
