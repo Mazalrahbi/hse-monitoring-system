@@ -164,7 +164,7 @@ export function AdminPanel() {
     console.log('Loading users...');
     
     try {
-      // Use a simpler approach with a single query using proper joins
+      // Load users with LEFT JOIN to handle users without roles
       const { data: usersWithRoles, error: usersError } = await supabaseClient
         .from('app_user')
         .select(`
@@ -175,7 +175,7 @@ export function AdminPanel() {
           created_at,
           last_login_at,
           is_active,
-          user_role!inner (
+          user_role (
             role (
               name
             )
@@ -183,32 +183,11 @@ export function AdminPanel() {
         `)
         .order('created_at', { ascending: false });
 
-      console.log('Users with roles query result:', { usersWithRoles, usersError });
+      console.log('Users query result:', { usersWithRoles, usersError });
 
       if (usersError) {
         console.error('Error loading users:', usersError);
-        // Fallback: try loading users without roles
-        const { data: basicUsers, error: basicError } = await supabaseClient
-          .from('app_user')
-          .select('user_id, email, display_name, department, created_at, last_login_at, is_active')
-          .order('created_at', { ascending: false });
-          
-        if (!basicError && basicUsers) {
-          const usersWithDefaultRoles = basicUsers.map(user => ({
-            id: user.user_id,
-            email: user.email,
-            display_name: user.display_name,
-            department: user.department,
-            created_at: user.created_at,
-            last_sign_in_at: user.last_login_at,
-            is_active: user.is_active ?? true,
-            role: 'viewer' // Default role
-          }));
-          console.log('Loaded users with default roles:', usersWithDefaultRoles);
-          setUsers(usersWithDefaultRoles);
-        } else {
-          setUsers([]);
-        }
+        setUsers([]);
         return;
       }
 
@@ -218,8 +197,9 @@ export function AdminPanel() {
         return;
       }
 
-      // Process the joined data
+      // Process the joined data - handle users with or without roles
       const processedUsers = usersWithRoles.map((user: any) => {
+        // user_role is an array, get first role if exists
         const roleData = user.user_role?.[0]?.role;
         const roleName = roleData?.name || 'viewer';
         
@@ -235,10 +215,10 @@ export function AdminPanel() {
         };
       });
 
-      console.log('Processed users with roles:', processedUsers);
+      console.log('Processed users:', processedUsers.length);
       setUsers(processedUsers);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Unexpected error loading users:', error);
       setUsers([]);
     }
   };

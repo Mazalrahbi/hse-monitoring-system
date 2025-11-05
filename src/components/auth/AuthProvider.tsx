@@ -136,18 +136,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Fetching app user for auth_user_id:', authUserId);
       
-      // Add timeout for database queries
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Database query timeout')), 8000)
-      );
-      
-      const queryPromise = supabaseClient
+      const { data, error } = await supabaseClient
         .from('app_user')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single();
-      
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('Error fetching app user:', error);
@@ -159,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         
-        // For other errors, set to null and continue
+        // For other errors, set to null and continue (don't log out user)
         setAppUser(null);
         return;
       }
@@ -168,13 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAppUser(data);
     } catch (error) {
       console.error('Error fetching app user:', error);
-      // Always set appUser to null if there's an error to prevent infinite loading
+      // Always set appUser to null if there's an error but don't log out
       setAppUser(null);
-      
-      // If this is a timeout or connection error, we should still allow the app to continue
-      if (error instanceof Error && error.message.includes('timeout')) {
-        console.warn('Database timeout - continuing with limited functionality');
-      }
     }
   };
 
