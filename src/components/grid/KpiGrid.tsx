@@ -503,10 +503,10 @@ export function KpiGrid() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 bg-black">
+      <div className="flex items-center justify-center h-64" style={{ background: 'var(--background)' }}>
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-yellow-500 mx-auto mb-4" />
-          <div className="text-lg font-semibold text-yellow-500">Loading HSE Monitoring Plan...</div>
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: 'var(--primary)' }} />
+          <div className="text-lg font-semibold" style={{ color: 'var(--primary)' }}>Loading HSE Monitoring Plan...</div>
         </div>
       </div>
     );
@@ -523,12 +523,12 @@ export function KpiGrid() {
   });
 
   return (
-    <div className="w-full h-full overflow-x-auto overflow-y-auto bg-black">
+    <div className="w-full h-full overflow-x-auto overflow-y-auto" style={{ background: 'var(--background)' }}>
       <div style={{ minWidth: '1900px', width: 'max-content' }}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-black via-neutral-900 to-black border-b-4 border-yellow-600 p-6 shadow-xl">
+        <div className="border-b-4 p-6 shadow-xl" style={{ background: 'var(--card)', borderColor: 'var(--primary)' }}>
           <div className="text-center">
-            <h1 className="text-3xl font-bold mb-3 tracking-wide">2025 HSE Monitoring Plan</h1>
+            <h1 className="text-3xl font-bold mb-3 tracking-wide" style={{ color: 'var(--primary)' }}>2025 HSE Monitoring Plan</h1>
             
             {/* Contractor Name */}
             <div className="text-sm mt-2 flex items-center justify-center">
@@ -601,23 +601,22 @@ export function KpiGrid() {
         </div>
 
         {/* Filter Section */}
-        <div className="bg-neutral-900 border-b-2 border-yellow-600 p-4 shadow-md">
+        <div className="border-b-2 p-4 shadow-md" style={{ background: 'var(--card)', borderColor: 'var(--primary)' }}>
           <div className="flex items-center space-x-4 max-w-4xl">
             <div className="flex items-center space-x-2 flex-1">
-              <label className="text-sm font-semibold text-yellow-500 whitespace-nowrap">
+              <label className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
                 Filter by Section:
               </label>
               <Select value={selectedSection} onValueChange={setSelectedSection}>
-                <SelectTrigger className="w-64 bg-neutral-800 border-yellow-600 text-yellow-400">
+                <SelectTrigger className="w-64">
                   <SelectValue placeholder="All Sections" />
                 </SelectTrigger>
-                <SelectContent className="bg-neutral-900 border-2 border-yellow-600 shadow-xl z-50">
-                  <SelectItem value="all" className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400">All Sections</SelectItem>
+                <SelectContent className="z-50">
+                  <SelectItem value="all">All Sections</SelectItem>
                   {Array.from(sectionsMap.entries()).map(([sectionId, items]) => (
                     <SelectItem 
                       key={sectionId} 
                       value={sectionId}
-                      className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400"
                     >
                       {items[0].section.order_idx}. {items[0].section.name}
                     </SelectItem>
@@ -627,22 +626,21 @@ export function KpiGrid() {
             </div>
 
             <div className="flex items-center space-x-2 flex-1">
-              <label className="text-sm font-semibold text-yellow-500 whitespace-nowrap">
+              <label className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
                 Filter by KPI:
               </label>
               <Select value={selectedKpi} onValueChange={setSelectedKpi}>
-                <SelectTrigger className="w-full bg-neutral-800 border-yellow-600 text-yellow-400">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="All KPIs" />
                 </SelectTrigger>
-                <SelectContent className="bg-neutral-900 border-2 border-yellow-600 shadow-xl z-50 max-h-96">
-                  <SelectItem value="all" className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400">All KPIs</SelectItem>
+                <SelectContent className="z-50 max-h-96">
+                  <SelectItem value="all">All KPIs</SelectItem>
                   {gridData
                     .filter(item => selectedSection === 'all' || item.section.section_id === selectedSection)
                     .map(item => (
                       <SelectItem 
                         key={item.kpi.kpi_id} 
                         value={item.kpi.kpi_id}
-                        className="bg-neutral-900 hover:bg-neutral-800 text-yellow-400"
                       >
                         {item.kpi.code}: {item.kpi.name}
                       </SelectItem>
@@ -669,8 +667,8 @@ export function KpiGrid() {
         </div>
 
         {/* Table Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-black via-neutral-900 to-black border-b-2 border-yellow-600 z-50 shadow-2xl overflow-visible">
-          <div className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 font-bold text-sm text-yellow-500 overflow-visible" style={{ minWidth: '1900px', width: '100%' }}>
+        <div className="sticky top-0 border-b-2 z-50 shadow-2xl overflow-visible" style={{ background: 'var(--card)', borderColor: 'var(--primary)' }}>
+          <div className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 font-bold text-sm overflow-visible" style={{ minWidth: '1900px', width: '100%', color: 'var(--primary)' }}>
             <div className="text-center font-bold">#</div>
             <div className="font-bold">HSE Actions & Requirements</div>
             
@@ -789,7 +787,7 @@ export function KpiGrid() {
           return (
             <div key={sectionId} className="border-b shadow-sm">
               {/* Section Header */}
-              <div className="bg-gradient-to-r from-black via-neutral-900 to-black p-4 font-bold text-yellow-500 text-lg border-b-2 border-yellow-600 shadow-md">
+              <div className="p-4 font-bold text-lg border-b-2 shadow-md" style={{ background: 'var(--card)', color: 'var(--primary)', borderColor: 'var(--primary)' }}>
                 <div className="flex items-center space-x-3">
                   <span className="bg-yellow-600 text-black px-3 py-1 rounded-full text-sm font-bold">
                     {section.order_idx}
@@ -802,18 +800,22 @@ export function KpiGrid() {
               {filteredItems.map((item, index) => (
                 <div
                   key={item.kpi.kpi_id}
-                  className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 border-b border-yellow-900/30 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-black text-sm bg-neutral-950 min-w-[1900px] transition-all duration-200"
+                  className="grid grid-cols-[60px_450px_repeat(12,_110px)] gap-3 p-4 border-b text-sm min-w-[1900px] transition-all duration-200"
+                  style={{ 
+                    background: 'var(--background)', 
+                    borderColor: 'var(--border)'
+                  }}
                 >
                   <div className="text-center font-bold text-black bg-yellow-500 rounded-lg p-2 flex items-center justify-center shadow-sm border-2 border-yellow-600">
                     {section.order_idx}.{index + 1}
                   </div>
                   
                   <div className="pr-2">
-                    <div className="font-bold text-yellow-400 leading-tight text-sm mb-2 p-3 bg-gradient-to-br from-neutral-900 to-black rounded-lg shadow-sm border-2 border-yellow-600">
+                    <div className="font-bold leading-tight text-sm mb-2 p-3 rounded-lg shadow-sm border-2" style={{ color: 'var(--foreground)', background: 'var(--muted)', borderColor: 'var(--primary)' }}>
                       {item.kpi.name}
                     </div>
                     {item.kpi.description && (
-                      <div className="text-xs text-yellow-300 mt-1 p-2 bg-neutral-900 rounded border-l-4 border-yellow-500">
+                      <div className="text-xs mt-1 p-2 rounded border-l-4" style={{ color: 'var(--muted-foreground)', background: 'var(--muted)', borderColor: 'var(--primary)' }}>
                         {item.kpi.description.substring(0, 120)}...
                       </div>
                     )}
