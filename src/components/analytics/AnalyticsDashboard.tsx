@@ -78,8 +78,9 @@ export function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [selectedSection, setSelectedSection] = useState<string>('all');
-  const [periods, setPeriods] = useState<Array<{id: string, label: string}>>([]);
+  const [periods, setPeriods] = useState<Array<{id: string, label: string, period_id: string}>>([]);
   const [sections, setSections] = useState<Array<{id: string, name: string}>>([]);
+  const [gridData, setGridData] = useState<any[]>([]);
 
   const loadFilters = useCallback(async () => {
     try {
@@ -92,7 +93,7 @@ export function AnalyticsDashboard() {
         .order('month');
       
       if (periodsData) {
-        setPeriods(periodsData.map(p => ({ id: p.period_id, label: p.label })));
+        setPeriods(periodsData.map(p => ({ id: p.period_id, label: p.label, period_id: p.period_id })));
       }
 
       // Load sections
@@ -147,6 +148,29 @@ export function AnalyticsDashboard() {
         .select('*');
 
       if (valuesError) throw valuesError;
+
+      // Organize data for grid
+      const organized = (kpisData || []).map(kpi => {
+        const section = sectionsData?.find(s => s.section_id === kpi.section_id);
+        
+        const values: { [periodId: string]: any } = {};
+        (valuesData || [])
+          .filter(value => value.kpi_id === kpi.kpi_id)
+          .forEach(value => {
+            values[value.period_id] = value;
+          });
+
+        return {
+          kpi,
+          values,
+          section: section || { 
+            section_id: kpi.section_id, 
+            name: 'Unknown Section'
+          }
+        };
+      });
+
+      setGridData(organized);
 
       // Apply filters
       let filteredKpis = kpisData || [];
@@ -620,35 +644,110 @@ export function AnalyticsDashboard() {
         </Card>
       </div>
 
-      {/* Section Performance */}
+      {/* Section Performance with Individual KPIs */}
       <Card className="border shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Section Performance Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {analytics.sectionStats.map((section, index) => (
-              <div key={index} className="space-y-2 p-4 bg-white rounded-lg border hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-gray-900">{section.sectionName}</h4>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600">
-                      {section.completed} of {section.total} KPIs
-                    </span>
-                    <span className="text-xl font-bold text-gray-900">
-                      {section.completionPercentage.toFixed(1)}%
-                    </span>
+          <div className="space-y-6">
+            {analytics.sectionStats.map((section, sectionIndex) => {
+              // Get KPIs for this section
+              const sectionKpis = gridData
+                .filter(item => item.section.section_id === section.sectionName && 
+                               (selectedSection === 'all' || item.section.section_id === selectedSection))
+                .map((item, kpiIndex) => {
+                  // Calculate completion percentage for this specific KPI
+                  let completedMonths = 0;
+                  const totalMonths = selectedPeriod === 'all' ? periods.length : 1;
+                  
+                  if (selectedPeriod === 'all') {
+                    periods.forEach(period => {
+                      const value = item.values[period.period_id];
+                      if (value?.status === 'done') completedMonths++;
+                    });
+                  } else {
+                    const value = item.values[selectedPeriod];
+                    if (value?.status === 'done') completedMonths = 1;
+                  }
+                  
+                  const kpiCompletionPercentage = totalMonths > 0 ? (completedMonths / totalMonths) * 100 : 0;
+                  
+                  return {
+                    code: item.kpi.code,
+                    name: item.kpi.name,
+                    completionPercentage: kpiCompletionPercentage,
+                    completedMonths,
+                    totalMonths
+                  };
+                });
+
+              return (
+                <div key={sectionIndex} className="space-y-3 p-4 bg-white rounded-lg border hover:shadow-md transition-shadow">
+                  {/* Section Header */}
+                  <div className="flex items-center justify-between pb-3 border-b">
+                    <h4 className="font-bold text-gray-900 text-lg">{section.sectionName}</h4>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600">
+                        Overall: {section.completed} of {section.total} KPIs
+                      </span>
+                      <span className="text-2xl font-bold text-gray-900">
+                        {section.completionPercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Section Progress Bar */}
+                  <Progress 
+                    value={section.completionPercentage} 
+                    className="h-3"
+                    style={{
+                      backgroundColor: '#e5e7eb'
+                    }}
+                  />
+                  
+                  {/* Individual KPIs */}
+                  <div className="space-y-2 mt-4">
+                    {sectionKpis.map((kpi, kpiIndex) => (
+                      <div key={kpiIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="text-xs font-mono font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded">
+                            {kpi.code}
+                          </span>
+                          <span className="text-sm text-gray-800 flex-1">
+                            {kpi.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            {kpi.completedMonths}/{kpi.totalMonths} months
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="h-2 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${kpi.completionPercentage}%`,
+                                  backgroundColor: kpi.completionPercentage >= 70 ? '#10B981' : 
+                                                 kpi.completionPercentage >= 40 ? '#F59E0B' : '#EF4444'
+                                }}
+                              />
+                            </div>
+                            <span className={`text-sm font-bold min-w-[3rem] text-right ${
+                              kpi.completionPercentage >= 70 ? 'text-green-600' :
+                              kpi.completionPercentage >= 40 ? 'text-amber-600' :
+                              'text-red-600'
+                            }`}>
+                              {kpi.completionPercentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <Progress 
-                  value={section.completionPercentage} 
-                  className="h-2"
-                  style={{
-                    backgroundColor: '#e5e7eb'
-                  }}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
