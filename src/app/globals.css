@@ -265,7 +265,7 @@ tbody tr:hover {
 }
 
 /* Specific UI component overrides */
-.bg-white {
+.bg-white, .bg-card {
   background-color: var(--card) !important;
   color: var(--card-foreground) !important;
 }
@@ -275,8 +275,13 @@ tbody tr:hover {
   color: var(--foreground) !important;
 }
 
+.bg-black, [style*="background: black"], [style*="bg-black"] {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
 .text-gray-900, .text-gray-800, .text-gray-700,
-.text-slate-900, .text-slate-800, .text-slate-700 {
+.text-slate-900, .text-slate-800, .text-slate-700, .text-black {
   color: var(--foreground) !important;
 }
 
@@ -286,6 +291,12 @@ tbody tr:hover {
 
 .border-gray-200, .border-gray-300, .border-slate-200, .border-slate-300 {
   border-color: var(--border) !important;
+}
+
+/* Ensure all card-like elements use card background */
+[class*="Card"], [class*="card"] {
+  background-color: var(--card);
+  color: var(--card-foreground);
 }
 
 /* Toast notifications */

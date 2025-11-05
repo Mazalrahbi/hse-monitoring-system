@@ -351,7 +351,7 @@ export function AnalyticsDashboard() {
   ].filter(item => item.value > 0);
 
   return (
-    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
+    <div className="space-y-6 p-6 min-h-screen" style={{ background: 'var(--background)' }}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

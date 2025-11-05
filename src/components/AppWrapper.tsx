@@ -80,10 +80,10 @@ export function AppWrapper() {
   // Show loading screen while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--background)' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto"></div>
-          <p className="mt-2 text-yellow-500">Loading HSE Monitoring System...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto" style={{ borderColor: 'var(--primary)' }}></div>
+          <p className="mt-2" style={{ color: 'var(--primary)' }}>Loading HSE Monitoring System...</p>
         </div>
       </div>
     );
@@ -102,16 +102,16 @@ export function AppWrapper() {
   return (
     <ThemeProvider>
       <ToastProvider>
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen" style={{ background: 'var(--background)' }}>
       {/* Header */}
-      <header className="bg-neutral-900 shadow-sm border-b-2 border-yellow-600">
+      <header className="shadow-sm border-b-2" style={{ background: 'var(--card)', borderColor: 'var(--primary)' }}>
         <div className="max-w-full mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-yellow-500">
+              <h1 className="text-2xl font-bold" style={{ color: 'var(--primary)' }}>
                 HSE Monitoring System
               </h1>
-              <p className="text-sm text-yellow-400">
+              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
                 Real-time collaborative KPI tracking and management
               </p>
             </div>
@@ -163,13 +163,13 @@ export function AppWrapper() {
               </Button>
 
               {/* User Info */}
-              <div className="flex items-center space-x-3 border-l border-yellow-600 pl-4">
+              <div className="flex items-center space-x-3 border-l pl-4" style={{ borderColor: 'var(--primary)' }}>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-yellow-400">
+                  <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
                     {appUser.display_name || appUser.email}
                   </p>
                   <div className="flex items-center justify-end space-x-2">
-                    <p className="text-xs text-yellow-500">
+                    <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
                       {appUser.department || 'No Department'}
                     </p>
                     <div className="flex space-x-1">
@@ -206,16 +206,16 @@ export function AppWrapper() {
       {/* Main Content */}
       <main className="max-w-full mx-auto px-4 py-6">
         {currentView === 'grid' && (
-          <div className="bg-black rounded-lg shadow-md border-2 border-yellow-600">
-            <div className="p-4 border-b-2 border-yellow-600 bg-neutral-900">
+          <div className="rounded-lg shadow-md border-2" style={{ background: 'var(--background)', borderColor: 'var(--primary)' }}>
+            <div className="p-4 border-b-2" style={{ borderColor: 'var(--primary)', background: 'var(--card)' }}>
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-yellow-500">HSE Monitoring Plan - 2025</h2>
+                <h2 className="text-xl font-bold" style={{ color: 'var(--primary)' }}>HSE Monitoring Plan - 2025</h2>
                 <div className="flex items-center space-x-4">
                   <Badge variant="default" className="bg-emerald-600">
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></div>
+                    <div className="w-2 h-2 rounded-full mr-2" style={{ background: 'var(--primary)' }}></div>
                     Live
                   </Badge>
-                  <span className="text-sm font-bold text-yellow-400">
+                  <span className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
                     Last updated: {mounted ? new Date().toLocaleString() : 'Loading...'}
                   </span>
                 </div>
