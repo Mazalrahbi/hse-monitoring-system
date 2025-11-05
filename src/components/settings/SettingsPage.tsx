@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/components/theme/ThemeProvider';
 import { supabase } from '@/lib/supabase/client';
 import { 
   User, 
@@ -14,7 +15,10 @@ import {
   Palette, 
   Globe,
   Save,
-  RefreshCw
+  RefreshCw,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 
 interface UserProfile {
@@ -38,6 +42,7 @@ interface UserSettings {
 
 export function SettingsPage() {
   const { user, appUser } = useAuth();
+  const { theme, setTheme, actualTheme } = useTheme();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettings>({
     notifications_enabled: true,
@@ -444,28 +449,130 @@ export function SettingsPage() {
       </Card>
 
       {/* Appearance Settings */}
-      <Card>
+      <Card className="border shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center">
             <Palette className="h-5 w-5 mr-2" />
             Appearance Settings
           </CardTitle>
           <CardDescription>
-            Customize the look and feel of the application
+            Customize the look and feel of the application with Black & Gold theme
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Theme Selector with Visual Cards */}
           <div>
-            <label className="block text-sm font-medium mb-2">Theme</label>
-            <select
-              value={userSettings.theme}
-              onChange={(e) => setUserSettings({...userSettings, theme: e.target.value as 'light' | 'dark' | 'system'})}
-              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="system">System</option>
-            </select>
+            <label className="block text-sm font-medium mb-3">Theme Mode</label>
+            <div className="grid grid-cols-3 gap-3">
+              {/* Light Theme Option */}
+              <button
+                onClick={() => setTheme('light')}
+                className={`
+                  relative p-4 border-2 rounded-lg transition-all
+                  ${theme === 'light' 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-gray-300 hover:border-primary/50'
+                  }
+                `}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Sun className={`h-8 w-8 ${theme === 'light' ? 'text-primary' : ''}`} />
+                  <span className="text-sm font-medium">Light</span>
+                  <div className="flex space-x-1 mt-2">
+                    <div className="w-8 h-8 bg-white border-2 border-gray-300 rounded"></div>
+                    <div className="w-8 h-8 bg-yellow-400 rounded"></div>
+                  </div>
+                </div>
+                {theme === 'light' && (
+                  <div className="absolute top-2 right-2 w-3 h-3 bg-primary rounded-full"></div>
+                )}
+              </button>
+
+              {/* Dark Theme Option */}
+              <button
+                onClick={() => setTheme('dark')}
+                className={`
+                  relative p-4 border-2 rounded-lg transition-all
+                  ${theme === 'dark' 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-gray-300 hover:border-primary/50'
+                  }
+                `}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Moon className={`h-8 w-8 ${theme === 'dark' ? 'text-primary' : ''}`} />
+                  <span className="text-sm font-medium">Dark</span>
+                  <div className="flex space-x-1 mt-2">
+                    <div className="w-8 h-8 bg-black border-2 border-gray-600 rounded"></div>
+                    <div className="w-8 h-8 bg-yellow-400 rounded"></div>
+                  </div>
+                </div>
+                {theme === 'dark' && (
+                  <div className="absolute top-2 right-2 w-3 h-3 bg-primary rounded-full"></div>
+                )}
+              </button>
+
+              {/* System Theme Option */}
+              <button
+                onClick={() => setTheme('system')}
+                className={`
+                  relative p-4 border-2 rounded-lg transition-all
+                  ${theme === 'system' 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-gray-300 hover:border-primary/50'
+                  }
+                `}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Monitor className={`h-8 w-8 ${theme === 'system' ? 'text-primary' : ''}`} />
+                  <span className="text-sm font-medium">System</span>
+                  <div className="flex space-x-1 mt-2">
+                    <div className="w-4 h-8 bg-white border-l-2 border-t-2 border-b-2 border-gray-300 rounded-l"></div>
+                    <div className="w-4 h-8 bg-black border-r-2 border-t-2 border-b-2 border-gray-600 rounded-r"></div>
+                  </div>
+                </div>
+                {theme === 'system' && (
+                  <div className="absolute top-2 right-2 w-3 h-3 bg-primary rounded-full"></div>
+                )}
+              </button>
+            </div>
+            
+            {/* Current Applied Theme Info */}
+            <div className="mt-3 p-3 bg-muted rounded-md">
+              <p className="text-sm text-muted-foreground">
+                <strong>Currently applied:</strong> {actualTheme === 'dark' ? '🌙 Dark' : '☀️ Light'} Mode
+                {theme === 'system' && ' (matches your system preference)'}
+              </p>
+            </div>
+          </div>
+
+          {/* Color Preview */}
+          <div>
+            <label className="block text-sm font-medium mb-3">Color Scheme Preview</label>
+            <div className="p-4 border-2 border-primary rounded-lg bg-card">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">Black & Gold Theme</span>
+                <Badge variant="default" className="bg-primary text-primary-foreground">Active</Badge>
+              </div>
+              <div className="flex space-x-2">
+                <div className="flex-1">
+                  <div className="h-16 bg-background border-2 border-primary rounded mb-1"></div>
+                  <p className="text-xs text-center text-muted-foreground">Background</p>
+                </div>
+                <div className="flex-1">
+                  <div className="h-16 bg-card border-2 border-primary rounded mb-1"></div>
+                  <p className="text-xs text-center text-muted-foreground">Cards</p>
+                </div>
+                <div className="flex-1">
+                  <div className="h-16 bg-primary rounded mb-1"></div>
+                  <p className="text-xs text-center text-muted-foreground">Primary Gold</p>
+                </div>
+                <div className="flex-1">
+                  <div className="h-16 bg-accent rounded mb-1"></div>
+                  <p className="text-xs text-center text-muted-foreground">Accent Gold</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -473,7 +580,7 @@ export function SettingsPage() {
             <select
               value={userSettings.language}
               onChange={(e) => setUserSettings({...userSettings, language: e.target.value as 'en' | 'ar'})}
-              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
             >
               <option value="en">English</option>
               <option value="ar">العربية</option>

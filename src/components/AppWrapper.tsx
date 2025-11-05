@@ -8,6 +8,7 @@ import { SettingsPage } from '@/components/settings/SettingsPage';
 import { AdminPanel } from '@/components/admin/AdminPanel';
 import { excelExportService } from '@/lib/services/excelExport';
 import { ToastProvider } from '@/components/ui/toast';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,12 +91,17 @@ export function AppWrapper() {
 
   // Show login page if not authenticated
   if (!user || !appUser) {
-    return <LoginPage />;
+    return (
+      <ThemeProvider>
+        <LoginPage />
+      </ThemeProvider>
+    );
   }
 
   // Show main application
   return (
-    <ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
       <div className="min-h-screen bg-black">
       {/* Header */}
       <header className="bg-neutral-900 shadow-sm border-b-2 border-yellow-600">
@@ -241,6 +247,7 @@ export function AppWrapper() {
       </main>
 
       </div>
-    </ToastProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
