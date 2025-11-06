@@ -270,14 +270,16 @@ export function SettingsPage() {
         .upsert({
           user_id: appUser.user_id,
           ...userSettings
+        }, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;
 
       alert('Settings saved successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving settings:', error);
-      alert('Failed to save settings');
+      alert(`Failed to save settings: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
