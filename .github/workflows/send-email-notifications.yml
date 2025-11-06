@@ -1,0 +1,27 @@
+name: Send Email Notifications
+
+on:
+  schedule:
+    # Runs every minute
+    - cron: '* * * * *'
+  
+  # Allows manual trigger from Actions tab
+  workflow_dispatch:
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send pending notifications
+        run: |
+          curl -X GET ${{ secrets.APP_URL }}/api/cron/send-emails \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail-with-body \
+            --show-error \
+            --silent
+        continue-on-error: true
+      
+      - name: Log completion
+        run: echo "Notification processing completed at $(date)"
