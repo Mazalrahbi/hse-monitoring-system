@@ -35,6 +35,12 @@ const NOTIFICATION_TYPES = [
     label: 'Blocked KPI Alerts',
     description: 'Get notified when a KPI is marked as blocked (high priority)',
     icon: '⚠️'
+  },
+  {
+    type: 'attachment_uploaded',
+    label: 'Attachment Uploads',
+    description: 'Get notified when attachments or evidence files are uploaded to KPIs you own',
+    icon: '📎'
   }
 ];
 
