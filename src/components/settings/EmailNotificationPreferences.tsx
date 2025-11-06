@@ -77,7 +77,7 @@ export function EmailNotificationPreferences({ userId }: EmailNotificationPrefer
     try {
       setSaving(notificationType);
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notification_preferences')
         .upsert({
           user_id: userId,
@@ -86,9 +86,20 @@ export function EmailNotificationPreferences({ userId }: EmailNotificationPrefer
           frequency: 'immediate'
         }, {
           onConflict: 'user_id,notification_type'
-        });
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(error.message || 'Failed to update preference');
+      }
+
+      console.log('Update successful:', data);
 
       // Update local state
       setPreferences(prev => {
@@ -108,9 +119,9 @@ export function EmailNotificationPreferences({ userId }: EmailNotificationPrefer
           }];
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating notification preference:', error);
-      alert('Failed to update notification preference');
+      alert(`Failed to update notification preference: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(null);
     }
