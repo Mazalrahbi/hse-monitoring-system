@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { supabase } from '@/lib/supabase/client';
+import { EmailNotificationPreferences } from './EmailNotificationPreferences';
 import { 
   User, 
   Bell, 
@@ -407,6 +408,9 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Email Notification Preferences */}
+      <EmailNotificationPreferences userId={appUser?.user_id} />
 
       {/* Export Settings */}
       <Card>
