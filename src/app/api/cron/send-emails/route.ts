@@ -15,12 +15,12 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Get 1 pending notification (to avoid rate limits)
+    // Get up to 20 pending notifications
     const { data: notifications, error: fetchError } = await supabase
       .from('notification_queue')
       .select('queue_id')
       .eq('status', 'pending')
-      .limit(1);
+      .limit(20);
 
     if (fetchError) {
       throw new Error(`Failed to fetch notifications: ${fetchError.message}`);
@@ -34,23 +34,45 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Call Edge Function to send the email
-    const { data: result, error: invokeError } = await supabase.functions.invoke(
-      'send-notification',
-      {
-        body: { queueId: notifications[0].queue_id }
-      }
-    );
+    // Send all notifications
+    const results = [];
+    const errors = [];
+    
+    for (const notification of notifications) {
+      try {
+        const { data: result, error: invokeError } = await supabase.functions.invoke(
+          'send-notification',
+          {
+            body: { queueId: notification.queue_id }
+          }
+        );
 
-    if (invokeError) {
-      throw new Error(`Failed to send notification: ${invokeError.message}`);
+        if (invokeError) {
+          errors.push({ 
+            queueId: notification.queue_id, 
+            error: invokeError.message 
+          });
+        } else {
+          results.push({ 
+            queueId: notification.queue_id, 
+            result 
+          });
+        }
+      } catch (err: any) {
+        errors.push({ 
+          queueId: notification.queue_id, 
+          error: err.message 
+        });
+      }
     }
 
     return NextResponse.json({
       success: true,
-      processed: 1,
-      queueId: notifications[0].queue_id,
-      result
+      processed: results.length,
+      failed: errors.length,
+      total: notifications.length,
+      results,
+      errors: errors.length > 0 ? errors : undefined
     });
 
   } catch (error: any) {
