@@ -356,7 +356,27 @@ export function AnalyticsDashboard() {
   }, [loadFilters]);
 
   useEffect(() => {
-    loadAnalytics();
+    let mounted = true;
+    let refreshInterval: NodeJS.Timeout;
+    
+    // Initial load
+    if (mounted) {
+      loadAnalytics();
+    }
+    
+    // Set up periodic refresh every 30 seconds to keep connection alive
+    refreshInterval = setInterval(() => {
+      if (mounted) {
+        loadAnalytics();
+      }
+    }, 30000); // 30 seconds
+    
+    return () => {
+      mounted = false;
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
   }, [loadAnalytics]);
 
   if (loading) {

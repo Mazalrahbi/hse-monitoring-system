@@ -17,31 +17,95 @@ export const supabaseClient = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    // Refresh token before it expires (default is 1 hour, refresh at 50 minutes)
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     storageKey: 'hse-supabase-auth',
     flowType: 'pkce'
   },
   global: {
     headers: {
-      'x-application-name': 'hse-monitoring-system'
+      'x-application-name': 'hse-monitoring-system',
+      'Connection': 'keep-alive'
+    },
+    // Increase fetch timeout to 60 seconds
+    fetch: (url, options = {}) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+        keepalive: true
+      }).finally(() => clearTimeout(timeoutId));
     }
   },
   db: {
     schema: 'public'
   },
-  // Increase timeout and add retry logic
   realtime: {
     params: {
       eventsPerSecond: 10
-    }
+    },
+    // Heartbeat to keep connection alive
+    heartbeatIntervalMs: 30000, // 30 seconds
+    // Increase timeout for realtime connections
+    timeout: 60000 // 60 seconds
   }
 })
 
 // For backward compatibility
 export const supabase = supabaseClient
 
+// Connection health check and recovery
+let connectionHealthy = true;
+let lastSuccessfulRequest = Date.now();
+
+// Periodic health check
+if (typeof window !== 'undefined') {
+  setInterval(async () => {
+    try {
+      // Simple query to test connection
+      const { error } = await supabaseClient.from('kpi_period').select('count').limit(1).single();
+      
+      if (!error) {
+        connectionHealthy = true;
+        lastSuccessfulRequest = Date.now();
+      } else {
+        console.warn('Connection health check failed:', error);
+        connectionHealthy = false;
+      }
+    } catch (error) {
+      console.warn('Connection health check error:', error);
+      connectionHealthy = false;
+      
+      // If connection has been down for more than 60 seconds, force page reload
+      const timeSinceLastSuccess = Date.now() - lastSuccessfulRequest;
+      if (timeSinceLastSuccess > 60000) {
+        console.error('Connection lost for over 60 seconds. Attempting to recover...');
+        // Try to refresh auth session
+        try {
+          await supabaseClient.auth.refreshSession();
+          console.log('Session refreshed successfully');
+        } catch (refreshError) {
+          console.error('Failed to refresh session:', refreshError);
+        }
+      }
+    }
+  }, 30000); // Check every 30 seconds
+}
+
 // Test connection on initialization
-supabaseClient.auth.getSession().catch((error) => {
-  console.error('Supabase connection test failed:', error);
+supabaseClient.auth.getSession()
+  .then(() => {
+    console.log('Supabase connection initialized successfully');
+    lastSuccessfulRequest = Date.now();
+  })
+  .catch((error) => {
+    console.error('Supabase connection test failed:', error);
+    connectionHealthy = false;
+  });
+
+// Export connection status
+export const getConnectionStatus = () => ({
+  healthy: connectionHealthy,
+  lastSuccessfulRequest
 });

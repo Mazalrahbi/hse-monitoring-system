@@ -73,9 +73,11 @@ export function KpiGrid() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isAutoRefresh = false) => {
     try {
-      console.log('Starting to load KPI data...');
+      if (!isAutoRefresh) {
+        console.log('Starting to load KPI data...');
+      }
       
       // Fetch periods for 2025
       const { data: periodsData, error: periodsError } = await supabaseClient
@@ -141,16 +143,43 @@ export function KpiGrid() {
       });
 
       setGridData(organized);
+      
+      if (!isAutoRefresh) {
+        console.log('KPI data loaded successfully');
+      }
     } catch (err) {
       console.error('Error loading data:', err);
-      error('Load Error', 'Failed to load KPI data');
+      if (!isAutoRefresh) {
+        error('Load Error', 'Failed to load KPI data. Retrying...');
+        // Retry once after a short delay
+        setTimeout(() => loadData(false), 2000);
+      }
     } finally {
       setLoading(false);
     }
   }, [error]);
 
   useEffect(() => {
-    loadData();
+    let mounted = true;
+    let refreshInterval: NodeJS.Timeout;
+    
+    // Initial load
+    loadData(false);
+    
+    // Set up periodic refresh every 30 seconds to keep connection alive
+    // and detect any changes from other users
+    refreshInterval = setInterval(() => {
+      if (mounted) {
+        loadData(true); // Silent refresh without notifications
+      }
+    }, 30000); // 30 seconds
+    
+    return () => {
+      mounted = false;
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
   }, [loadData]);
 
   const updateKpiValue = async (kpiId: string, periodId: string, newValue: string) => {
