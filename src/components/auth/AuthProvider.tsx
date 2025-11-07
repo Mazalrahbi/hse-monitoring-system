@@ -20,6 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFetchingUser, setIsFetchingUser] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -106,9 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, !!session);
       
-      if (mounted) {
-        // Don't set loading to true for subsequent auth changes
-        // Only set it for the initial load
+      if (!mounted) return;
+      
+      // Only handle specific events to prevent infinite loops
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -117,10 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAppUser(null);
         }
         
-        // Ensure loading is false after handling auth change
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     });
 
@@ -133,7 +132,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchAppUser = async (authUserId: string) => {
+    // Prevent concurrent fetches
+    if (isFetchingUser) {
+      console.log('Already fetching user, skipping...');
+      return;
+    }
+
     try {
+      setIsFetchingUser(true);
       console.log('Fetching app user for auth_user_id:', authUserId);
       
       const { data, error } = await supabaseClient
@@ -163,6 +169,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error fetching app user:', error);
       // Always set appUser to null if there's an error but don't log out
       setAppUser(null);
+    } finally {
+      setIsFetchingUser(false);
     }
   };
 
