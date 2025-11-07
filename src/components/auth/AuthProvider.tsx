@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabaseClient } from '@/lib/supabase/client';
 import { AppUser } from '@/lib/types/database';
@@ -20,7 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isFetchingUser, setIsFetchingUser] = useState(false);
+  const isFetchingUserRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -132,14 +132,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchAppUser = async (authUserId: string) => {
-    // Prevent concurrent fetches
-    if (isFetchingUser) {
+    // Prevent concurrent fetches using ref instead of state
+    if (isFetchingUserRef.current) {
       console.log('Already fetching user, skipping...');
       return;
     }
 
     try {
-      setIsFetchingUser(true);
+      isFetchingUserRef.current = true;
       console.log('Fetching app user for auth_user_id:', authUserId);
       
       const { data, error } = await supabaseClient
@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Always set appUser to null if there's an error but don't log out
       setAppUser(null);
     } finally {
-      setIsFetchingUser(false);
+      isFetchingUserRef.current = false;
     }
   };
 
