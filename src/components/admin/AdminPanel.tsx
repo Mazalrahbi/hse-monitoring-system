@@ -165,6 +165,7 @@ export function AdminPanel() {
     
     try {
       // Load users with LEFT JOIN to handle users without roles
+      // Specify the exact foreign key relationship to avoid ambiguity
       const { data: usersWithRoles, error: usersError } = await supabaseClient
         .from('app_user')
         .select(`
@@ -175,7 +176,7 @@ export function AdminPanel() {
           created_at,
           last_login_at,
           is_active,
-          user_role (
+          user_role!user_role_user_id_fkey (
             role (
               name
             )
@@ -239,12 +240,12 @@ export function AdminPanel() {
         changed_at,
         reason,
         source_page,
-        app_user!changed_by (
+        app_user!change_set_changed_by_fkey (
           display_name,
           email
         )
       `)
-      .order('changed_at', { ascending: false })
+      .order('changed_at', { ascending: false})
       .limit(100);
 
     console.log('Audit logs query result:', { data, error });
