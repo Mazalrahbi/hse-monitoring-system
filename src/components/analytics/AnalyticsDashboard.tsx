@@ -726,44 +726,162 @@ export function AnalyticsDashboard() {
                     }}
                   />
                   
-                  {/* Individual KPIs */}
-                  <div className="space-y-2 mt-4">
-                    {sectionKpis.map((kpi, kpiIndex) => (
-                      <div key={kpiIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center gap-3 flex-1">
-                          <span className="text-xs font-mono font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded">
-                            {kpi.code}
-                          </span>
-                          <span className="text-sm text-gray-800 flex-1">
-                            {kpi.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            {kpi.completedMonths}/{kpi.totalMonths} months
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="h-2 rounded-full transition-all duration-300"
-                                style={{
-                                  width: `${kpi.completionPercentage}%`,
-                                  backgroundColor: kpi.completionPercentage >= 70 ? '#10B981' : 
-                                                 kpi.completionPercentage >= 40 ? '#F59E0B' : '#EF4444'
-                                }}
-                              />
+                  {/* Individual KPIs with Monthly Breakdown */}
+                  <div className="space-y-4 mt-4">
+                    {gridData
+                      .filter(item => item.section.section_id === section.sectionName && 
+                                     (selectedSection === 'all' || item.section.section_id === selectedSection))
+                      .map((item, kpiIndex) => {
+                        // Calculate overall completion
+                        let completedMonths = 0;
+                        const totalMonths = selectedPeriod === 'all' ? periods.length : 1;
+                        
+                        if (selectedPeriod === 'all') {
+                          periods.forEach(period => {
+                            const value = item.values[period.period_id];
+                            if (value?.status === 'done') completedMonths++;
+                          });
+                        } else {
+                          const value = item.values[selectedPeriod];
+                          if (value?.status === 'done') completedMonths = 1;
+                        }
+                        
+                        const kpiCompletionPercentage = totalMonths > 0 ? (completedMonths / totalMonths) * 100 : 0;
+                        
+                        return (
+                          <div key={kpiIndex} className="bg-gray-50 rounded-md border border-gray-200">
+                            {/* KPI Header */}
+                            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200">
+                              <div className="flex items-center gap-3 flex-1">
+                                <span className="text-xs font-mono font-bold text-white bg-blue-600 px-2 py-1 rounded shadow">
+                                  {item.kpi.code}
+                                </span>
+                                <span className="text-sm font-semibold text-gray-900">
+                                  {item.kpi.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-gray-600 font-medium">
+                                  {completedMonths}/{totalMonths} months
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 bg-gray-300 rounded-full h-2.5 shadow-inner">
+                                    <div 
+                                      className="h-2.5 rounded-full transition-all duration-300 shadow-sm"
+                                      style={{
+                                        width: `${kpiCompletionPercentage}%`,
+                                        backgroundColor: kpiCompletionPercentage >= 70 ? '#10B981' : 
+                                                       kpiCompletionPercentage >= 40 ? '#F59E0B' : '#EF4444'
+                                      }}
+                                    />
+                                  </div>
+                                  <span className={`text-sm font-bold min-w-[3rem] text-right ${
+                                    kpiCompletionPercentage >= 70 ? 'text-green-600' :
+                                    kpiCompletionPercentage >= 40 ? 'text-amber-600' :
+                                    'text-red-600'
+                                  }`}>
+                                    {kpiCompletionPercentage.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                            <span className={`text-sm font-bold min-w-[3rem] text-right ${
-                              kpi.completionPercentage >= 70 ? 'text-green-600' :
-                              kpi.completionPercentage >= 40 ? 'text-amber-600' :
-                              'text-red-600'
-                            }`}>
-                              {kpi.completionPercentage.toFixed(1)}%
-                            </span>
+                            
+                            {/* Monthly Status Grid */}
+                            {selectedPeriod === 'all' && (
+                              <div className="p-3">
+                                <div className="grid grid-cols-12 gap-2">
+                                  {periods.map((period, periodIndex) => {
+                                    const value = item.values[period.period_id];
+                                    const status = value?.status || 'not_started';
+                                    
+                                    // Status colors and icons
+                                    const statusConfig = {
+                                      'done': { 
+                                        bg: 'bg-green-100', 
+                                        border: 'border-green-400', 
+                                        text: 'text-green-700',
+                                        icon: '✓'
+                                      },
+                                      'in_progress': { 
+                                        bg: 'bg-blue-100', 
+                                        border: 'border-blue-400', 
+                                        text: 'text-blue-700',
+                                        icon: '◐'
+                                      },
+                                      'blocked': { 
+                                        bg: 'bg-red-100', 
+                                        border: 'border-red-400', 
+                                        text: 'text-red-700',
+                                        icon: '✕'
+                                      },
+                                      'needs_review': { 
+                                        bg: 'bg-amber-100', 
+                                        border: 'border-amber-400', 
+                                        text: 'text-amber-700',
+                                        icon: '!'
+                                      },
+                                      'not_started': { 
+                                        bg: 'bg-gray-100', 
+                                        border: 'border-gray-300', 
+                                        text: 'text-gray-500',
+                                        icon: '○'
+                                      }
+                                    };
+                                    
+                                    const config = statusConfig[status as keyof typeof statusConfig];
+                                    
+                                    return (
+                                      <div
+                                        key={periodIndex}
+                                        className={`${config.bg} ${config.border} border-2 rounded-md p-2 text-center transition-all hover:shadow-md hover:scale-105 cursor-pointer`}
+                                        title={`${period.label}: ${status.replace('_', ' ').toUpperCase()}`}
+                                      >
+                                        <div className={`text-xs font-bold ${config.text} mb-1`}>
+                                          {period.label.split('-')[0]}
+                                        </div>
+                                        <div className={`text-lg font-bold ${config.text}`}>
+                                          {config.icon}
+                                        </div>
+                                        <div className={`text-[10px] ${config.text} mt-1 font-medium`}>
+                                          {status === 'done' ? 'Done' :
+                                           status === 'in_progress' ? 'Progress' :
+                                           status === 'blocked' ? 'Blocked' :
+                                           status === 'needs_review' ? 'Review' :
+                                           'Pending'}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                
+                                {/* Month Legend */}
+                                <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-center gap-4 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    <span className="text-xs text-gray-600">Done</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <span className="text-xs text-gray-600">In Progress</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                                    <span className="text-xs text-gray-600">Needs Review</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    <span className="text-xs text-gray-600">Blocked</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                    <span className="text-xs text-gray-600">Not Started</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
                   </div>
                 </div>
               );
