@@ -45,7 +45,7 @@ interface AttachmentModalState {
 }
 
 export function KpiGrid() {
-  const { appUser } = useAuth();
+  const { appUser, user } = useAuth();
   const { success, error } = useToast();
   const [gridData, setGridData] = useState<GridData[]>([]);
   const [periods, setPeriods] = useState<KpiPeriod[]>([]);
@@ -225,6 +225,36 @@ export function KpiGrid() {
         return false;
       }
 
+      // Log the change to audit trail
+      if (user) {
+        try {
+          const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
+          const period = periods.find(p => p.period_id === periodId);
+          
+          await supabaseClient
+            .from('change_set')
+            .insert({
+              entity: 'kpi_value',
+              entity_id: existingValue?.value_id || result.data?.[0]?.value_id,
+              field: 'value_update',
+              old_value: existingValue ? JSON.stringify({
+                text: existingValue.text_value,
+                numeric: existingValue.numeric_value
+              }) : null,
+              new_value: JSON.stringify({
+                text: newValue,
+                numeric: numericValue
+              }),
+              changed_by: user.id,
+              reason: `KPI: ${kpiItem?.kpi.code} - ${kpiItem?.kpi.name} | Month: ${period?.label}`,
+              source_page: '/kpi-grid'
+            });
+        } catch (auditError) {
+          console.error('Error logging to audit trail:', auditError);
+          // Don't fail the update if audit logging fails
+        }
+      }
+
       await loadData();
       
       const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
@@ -284,6 +314,30 @@ export function KpiGrid() {
       if (result.error) {
         error('Save Failed', `Could not save status update: ${result.error.message}`);
         return false;
+      }
+
+      // Log the change to audit trail
+      if (user) {
+        try {
+          const kpiItem = gridData.find(item => item.kpi.kpi_id === kpiId);
+          const period = periods.find(p => p.period_id === periodId);
+          
+          await supabaseClient
+            .from('change_set')
+            .insert({
+              entity: 'kpi_value',
+              entity_id: existingValue?.value_id || result.data?.[0]?.value_id,
+              field: 'status_update',
+              old_value: existingValue?.status || 'not_started',
+              new_value: newStatus,
+              changed_by: user.id,
+              reason: `KPI: ${kpiItem?.kpi.code} - ${kpiItem?.kpi.name} | Month: ${period?.label}`,
+              source_page: '/kpi-grid'
+            });
+        } catch (auditError) {
+          console.error('Error logging to audit trail:', auditError);
+          // Don't fail the update if audit logging fails
+        }
       }
 
       await loadData();

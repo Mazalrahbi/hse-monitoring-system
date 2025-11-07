@@ -71,58 +71,102 @@ interface ExportTemplate {
 
 type AdminView = 'users' | 'audit' | 'templates' | 'system';
 
-// Helper function to format audit trail changes in a user-friendly way
-const formatChangeValue = (value: string | null, label: 'From' | 'To') => {
-  if (!value) return null;
+// Helper function to extract KPI info from reason field
+const getKpiInfo = (reason: string | null) => {
+  if (!reason) return null;
+  const match = reason.match(/KPI: ([^\|]+) \| Month: (.+)/);
+  if (match) {
+    return { kpi: match[1].trim(), month: match[2].trim() };
+  }
+  return null;
+};
+
+// Helper function to format status values with color badges
+const formatStatus = (status: string) => {
+  const statusColors: { [key: string]: string } = {
+    'not_started': 'bg-slate-100 text-slate-800',
+    'in_progress': 'bg-amber-100 text-amber-800',
+    'done': 'bg-emerald-100 text-emerald-800',
+    'blocked': 'bg-red-100 text-red-800',
+    'needs_review': 'bg-blue-100 text-blue-800'
+  };
+  
+  const statusLabels: { [key: string]: string } = {
+    'not_started': 'Not Started',
+    'in_progress': 'In Progress',
+    'done': 'Done',
+    'blocked': 'Blocked',
+    'needs_review': 'Needs Review'
+  };
+  
+  return {
+    label: statusLabels[status] || status,
+    className: statusColors[status] || 'bg-gray-100 text-gray-800'
+  };
+};
+
+// Helper function to format value changes
+const formatValueChange = (value: string | null) => {
+  if (!value) return 'Empty';
   
   try {
-    // Try to parse as JSON first
     const parsed = JSON.parse(value);
-    
-    if (typeof parsed === 'object') {
-      // Handle object changes by showing key fields
-      const changes: string[] = [];
-      
-      if (parsed.status !== undefined) {
-        changes.push(`Status: ${parsed.status}`);
-      }
-      if (parsed.numeric_value !== undefined) {
-        changes.push(`Value: ${parsed.numeric_value}`);
-      }
-      if (parsed.text_value !== undefined) {
-        changes.push(`Text: "${parsed.text_value}"`);
-      }
-      if (parsed.evidence_url !== undefined) {
-        changes.push(`Evidence: ${parsed.evidence_url ? 'Attached' : 'None'}`);
-      }
-      if (parsed.target_date !== undefined) {
-        changes.push(`Target: ${parsed.target_date || 'Not set'}`);
-      }
-      
-      return changes.length > 0 ? changes.join(', ') : value.substring(0, 30) + '...';
+    if (parsed.text !== undefined && parsed.text !== null) {
+      return parsed.text;
     }
-    
-    return parsed.toString();
+    if (parsed.numeric !== undefined && parsed.numeric !== null) {
+      return parsed.numeric.toString();
+    }
+    return 'Empty';
   } catch {
-    // Not JSON, return as string (truncated if too long)
-    return value.length > 30 ? value.substring(0, 30) + '...' : value;
+    return value;
   }
 };
 
-// Helper function to create a readable change description
-const formatChangeDescription = (oldValue: string | null, newValue: string | null, field: string) => {
-  const oldFormatted = formatChangeValue(oldValue, 'From');
-  const newFormatted = formatChangeValue(newValue, 'To');
+// Helper function to create a readable change description for the new format
+const formatChangeDescription = (log: AuditLog) => {
+  const kpiInfo = getKpiInfo(log.reason);
   
-  if (oldFormatted && newFormatted) {
-    return `${oldFormatted} → ${newFormatted}`;
-  } else if (newFormatted) {
-    return `Set to: ${newFormatted}`;
-  } else if (oldFormatted) {
-    return `Removed: ${oldFormatted}`;
+  if (log.field === 'status_update') {
+    const oldStatus = formatStatus(log.old_value || 'not_started');
+    const newStatus = formatStatus(log.new_value || 'not_started');
+    
+    return (
+      <div className="flex items-center space-x-2">
+        <span className={`px-2 py-1 rounded text-xs font-medium ${oldStatus.className}`}>
+          {oldStatus.label}
+        </span>
+        <span className="text-gray-400">→</span>
+        <span className={`px-2 py-1 rounded text-xs font-medium ${newStatus.className}`}>
+          {newStatus.label}
+        </span>
+      </div>
+    );
   }
   
-  return 'No change recorded';
+  if (log.field === 'value_update') {
+    const oldValue = formatValueChange(log.old_value);
+    const newValue = formatValueChange(log.new_value);
+    
+    return (
+      <div className="flex items-center space-x-2">
+        <span className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+          {oldValue}
+        </span>
+        <span className="text-gray-400">→</span>
+        <span className="px-2 py-1 bg-emerald-100 rounded text-xs font-mono text-emerald-800">
+          {newValue}
+        </span>
+      </div>
+    );
+  }
+  
+  // Fallback for other field types
+  return (
+    <div className="text-xs text-gray-700">
+      {log.old_value ? `From: ${log.old_value.substring(0, 30)}` : 'New'} → {log.new_value ? `To: ${log.new_value.substring(0, 30)}` : 'Removed'}
+    </div>
+  );
 };
 
 export function AdminPanel() {
@@ -549,10 +593,10 @@ export function AdminPanel() {
                   <tr className="border-b border-gray-200 bg-gray-50">
                     <th className="text-left p-3 font-semibold text-gray-900">Timestamp</th>
                     <th className="text-left p-3 font-semibold text-gray-900">User</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Entity</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Field</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">KPI</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Month</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Type</th>
                     <th className="text-left p-3 font-semibold text-gray-900">Change</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Reason</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -563,31 +607,55 @@ export function AdminPanel() {
                       </td>
                     </tr>
                   ) : (
-                    filteredAuditLogs.map((log) => (
-                      <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="p-3 text-xs text-gray-700">
-                          {new Date(log.changed_at).toLocaleString()}
-                        </td>
-                        <td className="p-3 text-gray-900 font-medium">{log.user_name}</td>
-                        <td className="p-3">
-                          <Badge variant="outline" className="text-blue-800 border-blue-300">{log.entity}</Badge>
-                        </td>
-                        <td className="p-3 text-gray-700">{log.field}</td>
-                        <td className="p-3">
-                          <div className="max-w-sm">
-                            <div className="text-gray-900 text-sm bg-blue-50 px-3 py-2 rounded-md border border-blue-200">
-                              <div className="font-medium text-blue-900 mb-1">
-                                {log.field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    filteredAuditLogs.map((log) => {
+                      const kpiInfo = getKpiInfo(log.reason);
+                      
+                      return (
+                        <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="p-3 text-xs text-gray-700 whitespace-nowrap">
+                            {new Date(log.changed_at).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-gray-900 font-medium">{log.user_name}</td>
+                          <td className="p-3">
+                            {kpiInfo ? (
+                              <div className="text-sm">
+                                <div className="font-semibold text-gray-900">{kpiInfo.kpi}</div>
                               </div>
-                              <div className="text-gray-800 text-xs">
-                                {formatChangeDescription(log.old_value, log.new_value, log.field)}
-                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-500">N/A</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {kpiInfo ? (
+                              <Badge variant="outline" className="text-blue-800 border-blue-300 whitespace-nowrap">
+                                {kpiInfo.month}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-gray-500">N/A</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                log.field === 'status_update' 
+                                  ? 'text-purple-800 border-purple-300' 
+                                  : log.field === 'value_update'
+                                  ? 'text-emerald-800 border-emerald-300'
+                                  : 'text-gray-800 border-gray-300'
+                              }
+                            >
+                              {log.field === 'status_update' ? 'Status' : log.field === 'value_update' ? 'Value' : log.field}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <div className="max-w-sm">
+                              {formatChangeDescription(log)}
                             </div>
-                          </div>
-                        </td>
-                        <td className="p-3 text-xs text-gray-600">{log.reason || 'No reason provided'}</td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
